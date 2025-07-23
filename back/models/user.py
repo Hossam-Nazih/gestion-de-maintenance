@@ -1,18 +1,53 @@
-from extensions import db
-from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from passlib.context import CryptContext
+from database import Base
+from datetime import datetime
+from enum import Enum
 
-class User(db.Model):
-    __tablename__ = 'users'
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False)
-    username = db.Column(db.String(100), nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    telephone = db.Column(db.String(20))
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
+class RoleEnum(str, Enum):
+    technicien = "technicien"
+    admin = "admin"
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+class User(Base):
+    __tablename__ = "users"
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(80), unique=True, index=True, nullable=False)
+    email = Column(String(120), unique=True, index=True, nullable=False)
+    telephone = Column(String(20), nullable=True)
+    password_hash = Column(String(128), nullable=False)
+    role = Column(SQLEnum(RoleEnum), default=RoleEnum.technicien, nullable=False)  # Added role field
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Updated relationships for the new intervention structure
+    interventions_demandees = relationship(
+        "Intervention", 
+        foreign_keys="Intervention.demandeur_id",
+        back_populates="demandeur"
+    )
+    interventions_assignees = relationship(
+        "Intervention", 
+        foreign_keys="Intervention.technicien_id",
+        back_populates="technicien"
+    )
+    traitements = relationship("Traitement", back_populates="technicien")
+
+    def set_password(self, password: str):
+        self.password_hash = pwd_context.hash(password)
+
+    def verify_password(self, password: str) -> bool:
+        return pwd_context.verify(password, self.password_hash)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'telephone': self.telephone,
+            'role': self.role.value if self.role else None,  # Include role in response
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
