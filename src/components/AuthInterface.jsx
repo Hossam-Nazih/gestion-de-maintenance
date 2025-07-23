@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import './AuthInterface.css';
-
+import { login, register, logout } from '../api';
 const AuthInterface = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -9,7 +9,7 @@ const AuthInterface = ({ onLogin }) => {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    role: 'OPERATOR'
+    role: 'technicien'
   });
   const [loading, setLoading] = useState(false);
 
@@ -21,46 +21,37 @@ const AuthInterface = ({ onLogin }) => {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+// Update the handleSubmit function in AuthInterface.jsx
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-    // Validation
-    if (!formData.email || !formData.password) {
-      alert('Veuillez remplir tous les champs obligatoires.');
-      setLoading(false);
-      return;
-    }
-
-    if (!isLogin) {
-      if (formData.password !== formData.confirmPassword) {
-        alert('Les mots de passe ne correspondent pas.');
-        setLoading(false);
-        return;
-      }
-      if (!formData.firstName || !formData.lastName) {
-        alert('Veuillez remplir tous les champs obligatoires.');
-        setLoading(false);
-        return;
-      }
-    }
-
-    // Simulation de l'authentification
-    setTimeout(() => {
-      const user = {
-        id: Date.now(),
+  try {
+    if (isLogin) {
+      const response = await authApi.login({
+        username: formData.email, // Assuming email is used as username
+        password: formData.password
+      });
+      localStorage.setItem('carriprefa_user', JSON.stringify(response.data.user));
+      onLogin(response.data.user);
+    } else {
+      await authApi.register({
         email: formData.email,
-        firstName: formData.firstName || 'Utilisateur',
-        lastName: formData.lastName || 'CARRIPREFA',
-        role: formData.role,
-        company: 'CARRIPREFA'
-      };
-
-      localStorage.setItem('carriprefa_user', JSON.stringify(user));
-      onLogin(user);
-      setLoading(false);
-    }, 1000);
-  };
+        password: formData.password,
+        username: formData.email, // Using email as username
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        role: formData.role.toLowerCase(),
+      });
+      alert('Inscription réussie ! Veuillez vous connecter.');
+      setIsLogin(true);
+    }
+  } catch (err) {
+    alert(`Erreur : ${err.response?.data?.detail || err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="auth-container">

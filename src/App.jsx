@@ -6,85 +6,117 @@ import MaintenanceInterface from './components/MaintenanceInterface';
 import AnalyticsInterface from './components/AnalyticsInterface';
 import NotificationsInterface from './components/NotificationsInterface';
 import EquipmentStatusBar from './components/EquipmentStatusBar';
+import { useQuery } from '@tanstack/react-query';
+import { authApi, equipmentApi, technicienApi } from './api';
 import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [selectedInterface, setSelectedInterface] = useState(null);
   const [activeTab, setActiveTab] = useState('operator');
-  const [equipmentStatuses, setEquipmentStatuses] = useState([]);
+
+  // Fetch equipment statuses from API
+  const { data: equipmentStatuses = [], refetch: refetchEquipmentStatuses } = useQuery({
+    queryKey: ['equipmentStatuses'],
+    queryFn: async () => {
+      const response = await equipmentApi.getEquipmentsStatus();
+      return response.data.equipments.map(eq => ({
+        id: eq.equipment_id,
+        name: eq.equipment_name,
+        location: eq.location,
+        status: eq.current_status.toUpperCase(),
+        estimatedRepairTime: null // Will be updated by maintenance interface
+      }));
+    },
+    refetchInterval: 30000 // Refresh every 30 seconds
+  });
 
   useEffect(() => {
-    // Vérifier si l'utilisateur est déjà connecté (pour maintenance)
+    // Check if user is already logged in
     const savedUser = localStorage.getItem('carriprefa_user');
     const savedInterface = localStorage.getItem('carriprefa_interface');
     
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        
+        // Verify session is still valid
+        authApi.getProfile()
+          .catch(() => {
+            // If session is invalid, logout
+            handleLogout();
+          });
+      } catch (e) {
+        localStorage.removeItem('carriprefa_user');
+      }
     }
     
     if (savedInterface) {
       setSelectedInterface(savedInterface);
     }
-
-    // Simuler les mises à jour d'état des équipements
-    const interval = setInterval(() => {
-      setEquipmentStatuses(prev => {
-        const updated = [...prev];
-        // Simuler des changements d'état aléatoires
-        const randomIndex = Math.floor(Math.random() * updated.length);
-        const statuses = ['OPERATIONNEL', 'EN_ARRET', 'MAINTENANCE', 'REPARE_RECENT'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        
-        if (updated[randomIndex]) {
-          updated[randomIndex] = {
-            ...updated[randomIndex],
-            status: randomStatus,
-            estimatedRepairTime: randomStatus === 'OPERATIONNEL' ? null : '1h 30min'
-          };
-        }
-        
-        return updated;
-      });
-    }, 30000); // Mise à jour toutes les 30 secondes
-
-    return () => clearInterval(interval);
   }, []);
 
-  const handleLogin = (userData) => {
-    setUser(userData);
+  const handleLogin = async (userData) => {
+    try {
+      // Verify login with backend
+      const response = await authApi.login({
+        username: userData.email,
+        password: userData.password
+      });
+      
+      const user = {
+        ...response.data.user,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: userData.role
+      };
+      
+      setUser(user);
+      localStorage.setItem('carriprefa_user', JSON.stringify(user));
+      
+      // For new registrations
+      if (userData.isRegistration) {
+        alert('Inscription réussie ! Vous êtes maintenant connecté.');
+      }
+    } catch (error) {
+      alert(`Erreur de connexion: ${error.response?.data?.detail || error.message}`);
+      throw error;
+    }
   };
 
   const handleInterfaceSelect = (interfaceType) => {
-    // Always set the selected interface first
     setSelectedInterface(interfaceType);
+    localStorage.setItem('carriprefa_interface', interfaceType);
     
-    // If it's maintenance interface and user is authenticated, save to localStorage
-    if (interfaceType === 'maintenance' && user) {
-      localStorage.setItem('carriprefa_interface', interfaceType);
-    }
-    
-    // If it's demandeur interface, save to localStorage
-    if (interfaceType === 'demandeur') {
-      localStorage.setItem('carriprefa_interface', interfaceType);
-    }
-    
-    // Définir l'onglet par défaut selon l'interface
-    if (interfaceType === 'demandeur') {
-      setActiveTab('operator');
-    } else if (interfaceType === 'maintenance') {
-      setActiveTab('maintenance');
-    } else if (interfaceType === 'admin') {
-      setActiveTab('analytics');
+    // Set default tab based on interface
+    switch (interfaceType) {
+      case 'demandeur':
+        setActiveTab('operator');
+        break;
+      case 'maintenance':
+        setActiveTab('maintenance');
+        break;
+      case 'admin':
+        setActiveTab('analytics');
+        break;
+      default:
+        setActiveTab('operator');
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('carriprefa_user');
-    localStorage.removeItem('carriprefa_interface');
-    setUser(null);
-    setSelectedInterface(null);
-    setActiveTab('operator');
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('carriprefa_user');
+      localStorage.removeItem('carriprefa_interface');
+      setUser(null);
+      setSelectedInterface(null);
+      setActiveTab('operator');
+    }
   };
 
   const handleBackToSelection = () => {
@@ -92,66 +124,53 @@ function App() {
     setSelectedInterface(null);
   };
 
-  // Si interface maintenance sélectionnée mais pas d'utilisateur connecté, afficher l'authentification
+  // If maintenance interface selected but no user logged in, show auth
   if (selectedInterface === 'maintenance' && !user) {
     return <AuthInterface onLogin={handleLogin} />;
   }
 
-  // Si pas d'interface sélectionnée, afficher le sélecteur
+  // If no interface selected, show selector
   if (!selectedInterface) {
     return <InterfaceSelector onSelect={handleInterfaceSelect} user={user} />;
   }
 
-  // Définir les onglets selon l'interface sélectionnée
+  // Define tabs based on selected interface
   const getTabsForInterface = () => {
-    switch (selectedInterface) {
-      case 'demandeur':
-        return [
-          { 
-            id: 'operator', 
-            label: 'Nouvelle Demande', 
-            icon: '📝',
-          },
-          { 
-            id: 'notifications', 
-            label: 'Mes Notifications', 
-            icon: '🔔',
-          },
-        ];
-      case 'maintenance':
-        return [
-          { 
-            id: 'maintenance', 
-            label: 'Demandes d\'Intervention', 
-            icon: '🔧',
-          },
-        ];
-      case 'admin':
-        return [
-          { 
-            id: 'operator', 
-            label: 'Interface Demandeur', 
-            icon: '📝',
-          },
-          { 
-            id: 'maintenance', 
-            label: 'Équipe Maintenance', 
-            icon: '🔧',
-          },
-          { 
-            id: 'analytics', 
-            label: 'Tableau de Bord', 
-            icon: '📊',
-          },
-          { 
-            id: 'notifications', 
-            label: 'Notifications', 
-            icon: '🔔',
-          },
-        ];
-      default:
-        return [];
+    const tabs = [];
+    
+    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
+      tabs.push({ 
+        id: 'operator', 
+        label: selectedInterface === 'admin' ? 'Interface Demandeur' : 'Nouvelle Demande', 
+        icon: '📝',
+      });
     }
+    
+    if (selectedInterface === 'maintenance' || selectedInterface === 'admin') {
+      tabs.push({ 
+        id: 'maintenance', 
+        label: 'Équipe Maintenance', 
+        icon: '🔧',
+      });
+    }
+    
+    if (selectedInterface === 'admin') {
+      tabs.push({ 
+        id: 'analytics', 
+        label: 'Tableau de Bord', 
+        icon: '📊',
+      });
+    }
+    
+    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
+      tabs.push({ 
+        id: 'notifications', 
+        label: 'Notifications', 
+        icon: '🔔',
+      });
+    }
+    
+    return tabs;
   };
 
   const availableTabs = getTabsForInterface();
@@ -159,28 +178,41 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'operator':
-        return <OperatorInterface user={user} equipmentStatuses={equipmentStatuses} />;
+        return (
+          <OperatorInterface 
+            user={user} 
+            equipmentStatuses={equipmentStatuses} 
+            onStatusUpdate={refetchEquipmentStatuses}
+          />
+        );
       case 'maintenance':
-        return <MaintenanceInterface user={user} onStatusUpdate={setEquipmentStatuses} />;
+        return (
+          <MaintenanceInterface 
+            user={user} 
+            onStatusUpdate={refetchEquipmentStatuses}
+          />
+        );
       case 'analytics':
         return <AnalyticsInterface user={user} />;
       case 'notifications':
         return <NotificationsInterface user={user} />;
       default:
-        return <OperatorInterface user={user} equipmentStatuses={equipmentStatuses} />;
+        return (
+          <OperatorInterface 
+            user={user} 
+            equipmentStatuses={equipmentStatuses}
+            onStatusUpdate={refetchEquipmentStatuses}
+          />
+        );
     }
   };
 
   const getInterfaceTitle = () => {
     switch (selectedInterface) {
-      case 'demandeur':
-        return 'Interface Demandeur';
-      case 'maintenance':
-        return 'Interface Maintenance';
-      case 'admin':
-        return 'Interface Administrateur';
-      default:
-        return 'GMAO';
+      case 'demandeur': return 'Interface Demandeur';
+      case 'maintenance': return 'Interface Maintenance';
+      case 'admin': return 'Interface Administrateur';
+      default: return 'GMAO';
     }
   };
 
@@ -188,7 +220,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Afficher les notifications uniquement pour l'interface demandeur */}
       {selectedInterface === 'demandeur' && (
         <EquipmentStatusBar equipmentStatuses={equipmentStatuses} />
       )}

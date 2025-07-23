@@ -59,6 +59,32 @@ const MaintenanceInterface = () => {
     { value: 'REPORTEE', label: 'Reportée', color: '#ef4444' },
     { value: 'EN_ATTENTE_PIECES', label: 'En attente pièces', color: '#f59e0b' },
   ];
+  useEffect(() => {
+  const fetchInterventions = async () => {
+    try {
+      const response = await technicienApi.getAvailableInterventions();
+      setRequests(response.data.map(int => ({
+        id: int.id,
+        stopType: int.type_arret,
+        equipment: {
+          label: int.equipement?.nom || 'Unknown Equipment',
+          location: int.equipement?.localisation || 'Unknown Location',
+          type: int.equipement?.type || 'Unknown Type',
+          priority: int.priorite?.toUpperCase() || 'MOYENNE'
+        },
+        interventionType: int.type_probleme?.toUpperCase(),
+        description: int.description,
+        timestamp: int.created_at,
+        status: int.statut,
+        operator: int.demandeur_nom || 'Unknown Operator'
+      })));
+    } catch (error) {
+      console.error("Error fetching interventions:", error);
+    }
+  };
+
+  fetchInterventions();
+}, []);
 
   const getStatusColor = (status) => {
     const statusOption = statusOptions.find(s => s.value === status);
@@ -115,39 +141,40 @@ const MaintenanceInterface = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!formData.fixDuration || !formData.machineHours || !formData.fixDescription || !formData.status) {
-      alert('Veuillez remplir tous les champs obligatoires.');
-      return;
-    }
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!formData.fixDuration || !formData.machineHours || !formData.fixDescription || !formData.status) {
+    alert('Veuillez remplir tous les champs obligatoires.');
+    return;
+  }
 
-    // Mettre à jour la demande
+  try {
+    await technicienApi.createTraitement({
+      intervention_id: selectedRequest.id,
+      duree_fixation: parseFloat(formData.fixDuration),
+      heures_arret_machine: parseFloat(formData.machineHours),
+      description_reparation: formData.fixDescription,
+      pieces_changees: formData.changedParts,
+      type_fixation: formData.fixType,
+      transfert_specialiste: !!formData.forwardTo,
+      statut_final: formData.status
+    });
+
+    alert('Intervention mise à jour avec succès!');
+    
+    // Update local state
     setRequests(prev => prev.map(req => 
       req.id === selectedRequest.id 
         ? { ...req, status: formData.status, lastUpdate: new Date().toISOString() }
         : req
     ));
-
-    alert('Intervention mise à jour avec succès!');
-    handleCloseModal();
-  };
-
-  const formatTimeAgo = (timestamp) => {
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffInHours = Math.floor((now - time) / (1000 * 60 * 60));
     
-    if (diffInHours < 1) {
-      return 'Il y a moins d\'une heure';
-    } else if (diffInHours < 24) {
-      return `Il y a ${diffInHours} heure${diffInHours > 1 ? 's' : ''}`;
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24);
-      return `Il y a ${diffInDays} jour${diffInDays > 1 ? 's' : ''}`;
-    }
-  };
+    handleCloseModal();
+  } catch (error) {
+    alert(`Erreur: ${error.response?.data?.detail || error.message}`);
+  }
+};
 
   return (
     <div className="maintenance-interface">

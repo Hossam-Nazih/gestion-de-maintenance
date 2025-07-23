@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
 import './OperatorInterface.css';
+import React, { useState, useEffect } from 'react';
 
 const OperatorInterface = () => {
+  const [equipments, setEquipments] = useState([]);
   const [formData, setFormData] = useState({
     stopType: '',
     equipment: '',
     description: '',
     photo: null,
   });
+
+  useEffect(() => {
+  const fetchEquipments = async () => {
+    try {
+      const response = await equipmentApi.getEquipments();
+      setEquipments(response.data.map(eq => ({
+        value: eq.id,
+        label: eq.nom,
+        location: eq.localisation,
+        type: eq.type,
+        priority: eq.priorite || 'MOYENNE'
+      })));
+    } catch (error) {
+      console.error("Impossible de charger la liste des équipements.", error);
+    }
+  };
+
+  fetchEquipments();
+}, []);
+
+
 
   const stopTypes = [
     { value: 'AM', label: 'Arrêt de Maintenance (AM)', description: 'Maintenance préventive ou corrective' },
@@ -16,80 +38,8 @@ const OperatorInterface = () => {
     { value: 'CM', label: 'Changement de Moule (CM)', description: 'Changement d\'outillage' },
   ];
 
-  const equipments = [
-    { 
-      value: 'PRESSE_01', 
-      label: 'Presse hydraulique #1', 
-      type: 'production',
-      location: 'Atelier A',
-      priority: 'ELEVEE'
-    },
-    { 
-      value: 'PRESSE_02', 
-      label: 'Presse hydraulique #2', 
-      type: 'production',
-      location: 'Atelier A',
-      priority: 'ELEVEE'
-    },
-    { 
-      value: 'CONV_01', 
-      label: 'Convoyeur principal', 
-      type: 'production',
-      location: 'Ligne 1',
-      priority: 'ELEVEE'
-    },
-    { 
-      value: 'COMP_01', 
-      label: 'Compresseur d\'air #1', 
-      type: 'utilitaire',
-      location: 'Local technique',
-      priority: 'MOYENNE'
-    },
-    { 
-      value: 'COMP_02', 
-      label: 'Compresseur d\'air #2', 
-      type: 'utilitaire',
-      location: 'Local technique',
-      priority: 'MOYENNE'
-    },
-    { 
-      value: 'COOL_01', 
-      label: 'Système de refroidissement', 
-      type: 'climat',
-      location: 'Toiture',
-      priority: 'BASSE'
-    },
-    { 
-      value: 'ROBOT_01', 
-      label: 'Robot de soudage #1', 
-      type: 'production',
-      location: 'Atelier B',
-      priority: 'ELEVEE'
-    },
-    { 
-      value: 'ROBOT_02', 
-      label: 'Robot de soudage #2', 
-      type: 'production',
-      location: 'Atelier B',
-      priority: 'ELEVEE'
-    },
-    { 
-      value: 'CLIM_01', 
-      label: 'Climatisation bureau', 
-      type: 'climat',
-      location: 'Bureaux',
-      priority: 'BASSE'
-    },
-    { 
-      value: 'PONT_01', 
-      label: 'Pont roulant', 
-      type: 'manutention',
-      location: 'Atelier principal',
-      priority: 'MOYENNE'
-    },
-  ];
+  const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
 
-  // Fonction pour détecter automatiquement le type d'intervention
   const detectInterventionType = (description) => {
     const keywords = {
       MECANIQUE: ['fuite', 'usure', 'cassé', 'bloqué', 'vibration', 'bruit', 'graissage', 'roulement', 'courroie'],
@@ -104,7 +54,7 @@ const OperatorInterface = () => {
         return type;
       }
     }
-    return 'MECANIQUE'; // Par défaut
+    return 'MECANIQUE';
   };
 
   const handleInputChange = (e) => {
@@ -125,47 +75,42 @@ const OperatorInterface = () => {
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!formData.stopType || !formData.equipment || !formData.description.trim()) {
-      alert('Veuillez remplir tous les champs obligatoires.');
-      return;
-    }
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
-    const detectedType = detectInterventionType(formData.description);
-
-    const newRequest = {
-      id: Date.now().toString(),
-      stopType: formData.stopType,
-      equipment: selectedEquipment,
-      interventionType: detectedType,
-      description: formData.description,
-      photo: formData.photo,
-      timestamp: new Date().toISOString(),
-      status: 'EN_ATTENTE',
-      priority: selectedEquipment?.priority || 'MOYENNE',
-      operator: 'Utilisateur Connecté', // À remplacer par l'utilisateur réel
-    };
-
-    console.log('Nouvelle demande:', newRequest);
-    alert(`Demande d'intervention créée avec succès!\nType détecté: ${detectedType}\nPriorité: ${selectedEquipment?.priority}`);
-    
-    // Réinitialiser le formulaire
-    setFormData({
-      stopType: '',
-      equipment: '',
-      description: '',
-      photo: null,
-    });
-    
-    // Réinitialiser l'input file
-    const fileInput = document.getElementById('photo-upload');
-    if (fileInput) fileInput.value = '';
-  };
+  if (!formData.stopType || !formData.equipment || !formData.description.trim()) {
+    alert('Veuillez remplir tous les champs obligatoires.');
+    return;
+  }
 
   const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
+  if (!selectedEquipment) {
+    alert("Équipement non trouvé.");
+    return;
+  }
+
+  const detectedType = detectInterventionType(formData.description);
+
+  try {
+    const response = await interventionApi.createIntervention({
+      equipement_id: selectedEquipment.value,
+      type_arret: formData.stopType,
+      description: formData.description,
+      priorite: selectedEquipment.priority.toLowerCase(),
+      type_probleme: detectedType.toLowerCase(),
+      demandeur_nom: "Current User", // Replace with actual user name
+      demandeur_email: "user@example.com" // Replace with actual user email
+    });
+
+    alert('Demande d\'intervention créée avec succès !');
+    setFormData({ stopType: '', equipment: '', description: '', photo: null });
+    const fileInput = document.getElementById('photo-upload');
+    if (fileInput) fileInput.value = '';
+  } catch (error) {
+    console.error('Erreur:', error);
+    alert(`Erreur lors de la création de la demande: ${error.response?.data?.detail || error.message}`);
+  }
+};
 
   return (
     <div className="operator-interface">
@@ -176,9 +121,7 @@ const OperatorInterface = () => {
 
       <form onSubmit={handleSubmit} className="intervention-form">
         <div className="form-section">
-          <label className="form-label">
-            Type d'arrêt <span className="required">*</span>
-          </label>
+          <label className="form-label">Type d'arrêt <span className="required">*</span></label>
           <div className="radio-group">
             {stopTypes.map((type) => (
               <label key={type.value} className="radio-option">
@@ -216,6 +159,7 @@ const OperatorInterface = () => {
               </option>
             ))}
           </select>
+
           {selectedEquipment && (
             <div className="equipment-info">
               <div className="equipment-details">
@@ -251,9 +195,7 @@ const OperatorInterface = () => {
         </div>
 
         <div className="form-section">
-          <label className="form-label" htmlFor="photo-upload">
-            Photo (optionnel)
-          </label>
+          <label className="form-label" htmlFor="photo-upload">Photo (optionnel)</label>
           <div className="photo-upload-container">
             <input
               type="file"
