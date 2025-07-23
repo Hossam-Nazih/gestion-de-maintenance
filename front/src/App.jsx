@@ -7,28 +7,36 @@ import AnalyticsInterface from './components/AnalyticsInterface';
 import NotificationsInterface from './components/NotificationsInterface';
 import EquipmentStatusBar from './components/EquipmentStatusBar';
 import { useQuery } from '@tanstack/react-query';
-import { authApi, equipmentApi, technicienApi } from './api';
+import { authApi, equipmentApi } from './api';
 import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [selectedInterface, setSelectedInterface] = useState(null);
   const [activeTab, setActiveTab] = useState('operator');
+  const [showAuth, setShowAuth] = useState(false);
 
   // Fetch equipment statuses from API
   const { data: equipmentStatuses = [], refetch: refetchEquipmentStatuses } = useQuery({
     queryKey: ['equipmentStatuses'],
     queryFn: async () => {
-      const response = await equipmentApi.getEquipmentsStatus();
-      return response.data.equipments.map(eq => ({
-        id: eq.equipment_id,
-        name: eq.equipment_name,
-        location: eq.location,
-        status: eq.current_status.toUpperCase(),
-        estimatedRepairTime: null // Will be updated by maintenance interface
-      }));
+      try {
+        const response = await equipmentApi.getEquipmentsStatus();
+        return response.data.equipments?.map(eq => ({
+          id: eq.equipment_id,
+          name: eq.equipment_name,
+          location: eq.location,
+          status: eq.current_status?.toUpperCase(),
+          estimatedRepairTime: null
+        })) || [];
+      } catch (error) {
+        console.error('Error fetching equipment statuses:', error);
+        return [];
+      }
     },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 30000,
+    retry: 1,
+    enabled: selectedInterface !== null // Only fetch when interface is selected
   });
 
   useEffect(() => {
@@ -41,13 +49,16 @@ function App() {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
         
-        // Verify session is still valid
-        authApi.getProfile()
-          .catch(() => {
-            // If session is invalid, logout
-            handleLogout();
-          });
+        // Verify session is still valid only if we have a token
+        if (parsedUser.token) {
+          authApi.getProfile()
+            .catch(() => {
+              // If session is invalid, logout
+              handleLogout();
+            });
+        }
       } catch (e) {
+        console.error('Error parsing saved user:', e);
         localStorage.removeItem('carriprefa_user');
       }
     }
@@ -58,35 +69,33 @@ function App() {
   }, []);
 
   const handleLogin = async (userData) => {
-    try {
-      // Verify login with backend
-      const response = await authApi.login({
-        username: userData.email,
-        password: userData.password
-      });
+    try {      
+      setUser(userData);
+      localStorage.setItem('carriprefa_user', JSON.stringify(userData));
+      setShowAuth(false);
       
-      const user = {
-        ...response.data.user,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        role: userData.role
-      };
-      
-      setUser(user);
-      localStorage.setItem('carriprefa_user', JSON.stringify(user));
-      
-      // For new registrations
-      if (userData.isRegistration) {
-        alert('Inscription réussie ! Vous êtes maintenant connecté.');
+      // If we were trying to access maintenance interface, redirect there
+      if (selectedInterface === 'maintenance') {
+        setActiveTab('maintenance');
       }
     } catch (error) {
+      console.error('Login error:', error);
       alert(`Erreur de connexion: ${error.response?.data?.detail || error.message}`);
       throw error;
     }
   };
 
   const handleInterfaceSelect = (interfaceType) => {
+    // If selecting maintenance interface without being logged in, show auth
+    if (interfaceType === 'maintenance' && !user) {
+      setSelectedInterface(interfaceType);
+      setShowAuth(true);
+      localStorage.setItem('carriprefa_interface', interfaceType);
+      return;
+    }
+
     setSelectedInterface(interfaceType);
+    setShowAuth(false);
     localStorage.setItem('carriprefa_interface', interfaceType);
     
     // Set default tab based on interface
@@ -107,7 +116,9 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await authApi.logout();
+      if (user?.token) {
+        await authApi.logout();
+      }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -116,17 +127,27 @@ function App() {
       setUser(null);
       setSelectedInterface(null);
       setActiveTab('operator');
+      setShowAuth(false);
     }
   };
 
   const handleBackToSelection = () => {
     localStorage.removeItem('carriprefa_interface');
     setSelectedInterface(null);
+    setShowAuth(false);
   };
 
-  // If maintenance interface selected but no user logged in, show auth
-  if (selectedInterface === 'maintenance' && !user) {
-    return <AuthInterface onLogin={handleLogin} />;
+  const handleBackFromAuth = () => {
+    setShowAuth(false);
+    if (selectedInterface === 'maintenance') {
+      setSelectedInterface(null);
+      localStorage.removeItem('carriprefa_interface');
+    }
+  };
+
+  // If we need to show auth interface
+  if (showAuth) {
+    return <AuthInterface onLogin={handleLogin} onBack={handleBackFromAuth} />;
   }
 
   // If no interface selected, show selector
@@ -257,7 +278,7 @@ function App() {
             {showUserActions && user && (
               <div className="user-info">
                 <div className="user-details">
-                  <span className="user-name">{user.firstName} {user.lastName}</span>
+                  <span className="user-name">{user.firstName || user.username} {user.lastName || ''}</span>
                   <span className="user-role">
                     {user.role === 'OPERATOR' ? 'Opérateur' : 
                      user.role === 'MAINTENANCE' ? 'Maintenance' : 'Administrateur'}

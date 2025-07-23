@@ -10,6 +10,33 @@ const api = axios.create({
     },
 });
 
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+    (config) => {
+        const user = JSON.parse(localStorage.getItem('carriprefa_user') || '{}');
+        if (user.token) {
+            config.headers.Authorization = `Bearer ${user.token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+// Add response interceptor to handle auth errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('carriprefa_user');
+            localStorage.removeItem('carriprefa_interface');
+            window.location.reload();
+        }
+        return Promise.reject(error);
+    }
+);
+
 // Auth API
 export const authApi = {
   login: (credentials) => api.post('/login', credentials),
@@ -21,6 +48,7 @@ export const authApi = {
 // Equipment API
 export const equipmentApi = {
   getEquipments: () => api.get('/equipments'),
+  getEquipmentsStatus: () => api.get('/equipments/status'),
 };
 
 // Intervention API

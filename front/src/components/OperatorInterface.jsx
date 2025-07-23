@@ -1,5 +1,6 @@
 import './OperatorInterface.css';
 import React, { useState, useEffect } from 'react';
+import { equipmentApi, interventionApi } from '../api';
 
 const OperatorInterface = () => {
   const [equipments, setEquipments] = useState([]);
@@ -9,27 +10,31 @@ const OperatorInterface = () => {
     description: '',
     photo: null,
   });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-  const fetchEquipments = async () => {
-    try {
-      const response = await equipmentApi.getEquipments();
-      setEquipments(response.data.map(eq => ({
-        value: eq.id,
-        label: eq.nom,
-        location: eq.localisation,
-        type: eq.type,
-        priority: eq.priorite || 'MOYENNE'
-      })));
-    } catch (error) {
-      console.error("Impossible de charger la liste des équipements.", error);
-    }
-  };
+    const fetchEquipments = async () => {
+      try {
+        const response = await equipmentApi.getEquipments();
+        setEquipments(response.data.map(eq => ({
+          value: eq.id,
+          label: eq.nom,
+          location: eq.localisation,
+          type: eq.type,
+          priority: eq.priorite || 'MOYENNE'
+        })));
+      } catch (error) {
+        console.error("Impossible de charger la liste des équipements.", error);
+        // Set some mock data if API fails
+        setEquipments([
+          { value: '1', label: 'Presse hydraulique #1', location: 'Atelier A', type: 'production', priority: 'ELEVEE' },
+          { value: '2', label: 'Convoyeur principal', location: 'Zone B', type: 'transport', priority: 'MOYENNE' },
+        ]);
+      }
+    };
 
-  fetchEquipments();
-}, []);
-
-
+    fetchEquipments();
+  }, []);
 
   const stopTypes = [
     { value: 'AM', label: 'Arrêt de Maintenance (AM)', description: 'Maintenance préventive ou corrective' },
@@ -76,41 +81,58 @@ const OperatorInterface = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
+    
+    if (!formData.stopType || !formData.equipment || !formData.description.trim()) {
+      alert('Veuillez remplir tous les champs obligatoires.');
+      return;
+    }
 
-  if (!formData.stopType || !formData.equipment || !formData.description.trim()) {
-    alert('Veuillez remplir tous les champs obligatoires.');
-    return;
-  }
+    const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
+    if (!selectedEquipment) {
+      alert("Équipement non trouvé.");
+      return;
+    }
 
-  const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
-  if (!selectedEquipment) {
-    alert("Équipement non trouvé.");
-    return;
-  }
+    const detectedType = detectInterventionType(formData.description);
+    setLoading(true);
 
-  const detectedType = detectInterventionType(formData.description);
+    try {
+      const response = await interventionApi.createIntervention({
+        equipement_id: selectedEquipment.value,
+        type_arret: formData.stopType,
+        description: formData.description,
+        priorite: selectedEquipment.priority.toLowerCase(),
+        type_probleme: detectedType.toLowerCase(),
+        demandeur_nom: "Demandeur Anonyme", // Since no user is required for demandeur interface
+        demandeur_email: "demandeur@carriprefa.com"
+      });
 
-  try {
-    const response = await interventionApi.createIntervention({
-      equipement_id: selectedEquipment.value,
-      type_arret: formData.stopType,
-      description: formData.description,
-      priorite: selectedEquipment.priority.toLowerCase(),
-      type_probleme: detectedType.toLowerCase(),
-      demandeur_nom: "Current User", // Replace with actual user name
-      demandeur_email: "user@example.com" // Replace with actual user email
-    });
-
-    alert('Demande d\'intervention créée avec succès !');
-    setFormData({ stopType: '', equipment: '', description: '', photo: null });
-    const fileInput = document.getElementById('photo-upload');
-    if (fileInput) fileInput.value = '';
-  } catch (error) {
-    console.error('Erreur:', error);
-    alert(`Erreur lors de la création de la demande: ${error.response?.data?.detail || error.message}`);
-  }
-};
+      alert('Demande d\'intervention créée avec succès !');
+      
+      // Reset form
+      setFormData({ 
+        stopType: '', 
+        equipment: '', 
+        description: '', 
+        photo: null 
+      });
+      
+      // Reset file input
+      const fileInput = document.getElementById('photo-upload');
+      if (fileInput) fileInput.value = '';
+      
+    } catch (error) {
+      console.error('Erreur:', error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Erreur inconnue';
+      alert(`Erreur lors de la création de la demande: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="operator-interface">
@@ -215,8 +237,12 @@ const OperatorInterface = () => {
           </div>
         </div>
 
-        <button type="submit" className="submit-button">
-          ✉️ Envoyer la demande d'intervention
+        <button type="submit" className="submit-button" disabled={loading}>
+          {loading ? (
+            <>⏳ Envoi en cours...</>
+          ) : (
+            <>✉️ Envoyer la demande d'intervention</>
+          )}
         </button>
       </form>
     </div>

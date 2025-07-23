@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import './AuthInterface.css';
-import { login, register, logout } from '../api';
-const AuthInterface = ({ onLogin }) => {
+import { authApi } from '../api';
+
+const AuthInterface = ({ onLogin, onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
@@ -9,7 +10,7 @@ const AuthInterface = ({ onLogin }) => {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    role: 'technicien'
+    role: 'MAINTENANCE'
   });
   const [loading, setLoading] = useState(false);
 
@@ -21,37 +22,55 @@ const AuthInterface = ({ onLogin }) => {
     }));
   };
 
-// Update the handleSubmit function in AuthInterface.jsx
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    if (isLogin) {
-      const response = await authApi.login({
-        username: formData.email, // Assuming email is used as username
-        password: formData.password
-      });
-      localStorage.setItem('carriprefa_user', JSON.stringify(response.data.user));
-      onLogin(response.data.user);
-    } else {
-      await authApi.register({
-        email: formData.email,
-        password: formData.password,
-        username: formData.email, // Using email as username
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        role: formData.role.toLowerCase(),
-      });
-      alert('Inscription réussie ! Veuillez vous connecter.');
-      setIsLogin(true);
+    try {
+      if (isLogin) {
+        const response = await authApi.login({
+          username: formData.email,
+          password: formData.password
+        });
+        
+        const userData = {
+          ...response.data.user,
+          token: response.data.token || response.data.access_token, // Handle different token field names
+        };
+        
+        localStorage.setItem('carriprefa_user', JSON.stringify(userData));
+        onLogin(userData);
+      } else {
+        // Validate password confirmation
+        if (formData.password !== formData.confirmPassword) {
+          alert('Les mots de passe ne correspondent pas');
+          return;
+        }
+
+        await authApi.register({
+          email: formData.email,
+          password: formData.password,
+          username: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          role: formData.role,
+        });
+        
+        alert('Inscription réussie ! Veuillez vous connecter.');
+        setIsLogin(true);
+        setFormData({
+          ...formData,
+          password: '',
+          confirmPassword: ''
+        });
+      }
+    } catch (err) {
+      console.error('Auth error:', err);
+      alert(`Erreur : ${err.response?.data?.detail || err.response?.data?.message || err.message}`);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    alert(`Erreur : ${err.response?.data?.detail || err.message}`);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <div className="auth-container">
@@ -171,13 +190,21 @@ const handleSubmit = async (e) => {
               </>
             )}
 
-            <button type="submit" className="auth-submit" disabled={loading}>
-              {loading ? (
-                <span className="loading-spinner">⏳</span>
-              ) : (
-                isLogin ? '🔐 Se connecter' : '📝 S\'inscrire'
+            <div className="form-actions">
+              <button type="submit" className="auth-submit" disabled={loading}>
+                {loading ? (
+                  <span className="loading-spinner">⏳</span>
+                ) : (
+                  isLogin ? '🔐 Se connecter' : '📝 S\'inscrire'
+                )}
+              </button>
+              
+              {onBack && (
+                <button type="button" className="back-button" onClick={onBack}>
+                  ← Retour à la sélection
+                </button>
               )}
-            </button>
+            </div>
           </form>
 
           <div className="auth-footer">
