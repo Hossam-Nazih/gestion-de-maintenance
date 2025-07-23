@@ -1,0 +1,295 @@
+.operator-interface {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.interface-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.interface-header h2 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.interface-header p {
+  opacity: 0.9;
+  font-size: 1.1rem;
+}
+
+.intervention-form {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.form-section {
+  margin-bottom: 2rem;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.radio-group {
+  display: grid;
+  gap: 1rem;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.radio-option:hover {
+  border-color: #3b82f6;
+  background-color: #f8fafc;
+}
+
+.radio-option input[type="radio"] {
+  margin-right: 1rem;
+  margin-top: 0.25rem;
+  transform: scale(1.2);
+}
+
+.radio-option input[type="radio"]:checked + .radio-content {
+  color: #3b82f6;
+}
+
+.radio-option:has(input:checked) {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.radio-content {
+  flex: 1;
+}
+
+.radio-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.radio-description {
+  display: block;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.form-select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  background-color: white;
+  transition: border-color 0.3s ease;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.equipment-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+}
+
+.equipment-details {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.equipment-type,
+.equipment-location {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.equipment-priority {
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.priority-elevee {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.priority-moyenne {
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+.priority-basse {
+  background-color: #f0fdf4;
+  color: #16a34a;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color 0.3s ease;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.intervention-type-preview {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: #eff6ff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.type-label {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.detected-type {
+  font-weight: 600;
+  color: #3b82f6;
+  background-color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.photo-upload-container {
+  position: relative;
+}
+
+.photo-input {
+  display: none;
+}
+
+.photo-upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #f8fafc;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+.photo-upload-button:hover {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+  color: #3b82f6;
+}
+
+.photo-preview {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background-color: #f0fdf4;
+  border-radius: 6px;
+  border-left: 4px solid #16a34a;
+}
+
+.photo-name {
+  color: #16a34a;
+  font-size: 0.9rem;
+}
+
+.submit-button {
+  width: 100%;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.submit-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+}
+
+.submit-button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .operator-interface {
+    margin: 0;
+  }
+  
+  .interface-header {
+    padding: 1.5rem;
+  }
+  
+  .interface-header h2 {
+    font-size: 1.5rem;
+  }
+  
+  .intervention-form {
+    padding: 1.5rem;
+  }
+  
+  .equipment-details {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .radio-group {
+    gap: 0.75rem;
+  }
+  
+  .radio-option {
+    padding: 0.75rem;
+  }
+}
