@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import './AuthInterface.css';
 import { authApi } from '../api';
 
 const AuthInterface = ({ onLogin, onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
+    loginField: '', // This will be used for both email and username login
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
-    firstName: '',
-    lastName: '',
-    role: 'MAINTENANCE'
+    role: 'technicien',
   });
   const [loading, setLoading] = useState(false);
 
@@ -28,34 +28,54 @@ const AuthInterface = ({ onLogin, onBack }) => {
 
     try {
       if (isLogin) {
+        console.log('Attempting login with:', {
+          loginField: formData.loginField,
+          isEmail: formData.loginField.includes('@'),
+          password_length: formData.password.length
+        });
+        
+        // Try login with the provided field (could be email or username)
         const response = await authApi.login({
-          username: formData.email,
+          username: formData.loginField, // Backend expects 'username' field
           password: formData.password
         });
         
-        const userData = {
-          ...response.data.user,
-          token: response.data.token || response.data.access_token, // Handle different token field names
-        };
+        console.log('Login response:', response);
         
-        localStorage.setItem('carriprefa_user', JSON.stringify(userData));
+        // Extract user data from response
+        const userData = response.data.user;
+        console.log('User data extracted:', userData);
+        
+        // Store user data in React state or context instead of localStorage
+        // Note: localStorage is not supported in Claude artifacts
+        // If you need persistence, implement this in your actual environment
+        
+        // Call the onLogin callback with user data
         onLogin(userData);
+        
       } else {
-        // Validate password confirmation
+        // Registration logic
         if (formData.password !== formData.confirmPassword) {
           alert('Les mots de passe ne correspondent pas');
+          setLoading(false);
           return;
         }
-
-        await authApi.register({
+        
+        console.log('Sending registration request with:', {
+          email: formData.email,
+          username: formData.username,
+          role: formData.role,
+          password: '***'
+        });
+        
+        const registerResponse = await authApi.register({
           email: formData.email,
           password: formData.password,
-          username: formData.email,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
+          username: formData.username || formData.email, // Use username if provided, otherwise email
           role: formData.role,
         });
         
+        console.log('Registration response:', registerResponse);
         alert('Inscription réussie ! Veuillez vous connecter.');
         setIsLogin(true);
         setFormData({
@@ -65,8 +85,48 @@ const AuthInterface = ({ onLogin, onBack }) => {
         });
       }
     } catch (err) {
-      console.error('Auth error:', err);
-      alert(`Erreur : ${err.response?.data?.detail || err.response?.data?.message || err.message}`);
+      console.error('Auth error details:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          data: err.config?.data
+        }
+      });
+      
+      let errorMessage = 'Une erreur est survenue';
+      
+      if (err.response?.status === 422) {
+        errorMessage = 'Données invalides. Vérifiez vos informations.';
+        if (err.response?.data?.detail) {
+          errorMessage += ` Détails: ${JSON.stringify(err.response.data.detail)}`;
+        }
+      } else if (err.response?.status === 401) {
+        errorMessage = 'Email ou mot de passe incorrect.';
+        // Add more specific debugging for 401 errors
+        console.error('Login failed - 401 Unauthorized:', {
+          sentUsername: formData.loginField,
+          sentPasswordLength: formData.password.length,
+          backendResponse: err.response?.data
+        });
+      } else if (err.response?.status === 404) {
+        errorMessage = 'Service non disponible.';
+      } else if (err.response?.status === 500) {
+        errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.';
+      } else if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else {
+          errorMessage = err.response.data.detail || err.response.data.message || JSON.stringify(err.response.data);
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      alert(`Erreur : ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -77,7 +137,6 @@ const AuthInterface = ({ onLogin, onBack }) => {
       <div className="auth-background">
         <div className="auth-overlay"></div>
       </div>
-      
       <div className="auth-content">
         <div className="auth-header">
           <div className="company-logo">
@@ -111,43 +170,45 @@ const AuthInterface = ({ onLogin, onBack }) => {
 
           <form onSubmit={handleSubmit} className="auth-form">
             {!isLogin && (
-              <div className="form-row">
+              <>
                 <div className="form-group">
-                  <label>Prénom *</label>
+                  <label>Nom d'utilisateur *</label>
                   <input
                     type="text"
-                    name="firstName"
-                    value={formData.firstName}
+                    name="username"
+                    value={formData.username}
                     onChange={handleInputChange}
-                    placeholder="Votre prénom"
+                    placeholder="Votre nom d'utilisateur"
                     required={!isLogin}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Nom *</label>
+                  <label>Email *</label>
                   <input
-                    type="text"
-                    name="lastName"
-                    value={formData.lastName}
+                    type="email"
+                    name="email"
+                    value={formData.email}
                     onChange={handleInputChange}
-                    placeholder="Votre nom"
+                    placeholder="votre.email@carriprefa.com"
                     required={!isLogin}
                   />
                 </div>
-              </div>
+              </>
             )}
 
-            <div className="form-group">
-              <label>Email *</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="votre.email@carriprefa.com"
-                required
-              />
-            </div>
+            {isLogin && (
+              <div className="form-group">
+                <label>Nom d'utilisateur *</label>
+                <input
+                  type="text"
+                  name="loginField"
+                  value={formData.loginField}
+                  onChange={handleInputChange}
+                  placeholder="Votre nom d'utilisateur"
+                  required
+                />
+              </div>
+            )}
 
             <div className="form-group">
               <label>Mot de passe *</label>
@@ -162,32 +223,17 @@ const AuthInterface = ({ onLogin, onBack }) => {
             </div>
 
             {!isLogin && (
-              <>
-                <div className="form-group">
-                  <label>Confirmer le mot de passe *</label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleInputChange}
-                    placeholder="Confirmez votre mot de passe"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Rôle</label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                  >
-                    <option value="OPERATOR">Opérateur</option>
-                    <option value="MAINTENANCE">Équipe Maintenance</option>
-                    <option value="ADMIN">Administrateur</option>
-                  </select>
-                </div>
-              </>
+              <div className="form-group">
+                <label>Confirmer le mot de passe *</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  placeholder="Confirmez votre mot de passe"
+                  required
+                />
+              </div>
             )}
 
             <div className="form-actions">

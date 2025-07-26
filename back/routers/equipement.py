@@ -6,7 +6,12 @@ from models.equipement import Equipement  # Your ORM model
 
 router = APIRouter()
 
-@router.get("/equipments")
-def get_equipments(db: Session = Depends(get_db)):
+#@router.get("/equipments", response_model=list[Equipement])
+#def get_equipments(db: Session = Depends(get_db)):
+    #equipments = db.query(Equipement).all()
+    #return [equip.to_dict() for equip in equipments]
+
+@router.get("/equipments/status")
+def get_equipment_status(db: Session = Depends(get_db)):
     equipments = db.query(Equipement).all()
     return equipments

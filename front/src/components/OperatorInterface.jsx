@@ -1,6 +1,9 @@
 import './OperatorInterface.css';
 import React, { useState, useEffect } from 'react';
-import { equipmentApi, interventionApi } from '../api';
+import { equipmentApi } from '../api';
+import axios from 'axios';
+import { interventionApi } from '../api';
+import NotificationsInterface from './NotificationsInterface';
 
 const OperatorInterface = () => {
   const [equipments, setEquipments] = useState([]);
@@ -9,8 +12,33 @@ const OperatorInterface = () => {
     equipment: '',
     description: '',
     photo: null,
+    demandeurNom: '',
+    demandeurEmail: '',
+    demandeurTelephone: '',
   });
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [interventionRef, setInterventionRef] = useState('');
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [currentView, setCurrentView] = useState('demande'); // 'demande' or 'notifications'
+
+  // Fetch notification count
+  const fetchNotificationCount = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/tech/interventions-status');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.interventions) {
+          const unreadCount = data.interventions.filter(intervention => 
+            intervention.intervention_status !== 'terminee'
+          ).length;
+          setNotificationCount(unreadCount);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchEquipments = async () => {
@@ -19,22 +47,52 @@ const OperatorInterface = () => {
         setEquipments(response.data.map(eq => ({
           value: eq.id,
           label: eq.nom,
-          location: eq.localisation,
+          location: eq.localisation || 'Non spécifié',
           type: eq.type,
-          priority: eq.priorite || 'MOYENNE'
+          priority: determinePriority(eq.type)
         })));
       } catch (error) {
         console.error("Impossible de charger la liste des équipements.", error);
-        // Set some mock data if API fails
         setEquipments([
-          { value: '1', label: 'Presse hydraulique #1', location: 'Atelier A', type: 'production', priority: 'ELEVEE' },
-          { value: '2', label: 'Convoyeur principal', location: 'Zone B', type: 'transport', priority: 'MOYENNE' },
-        ]);
+  { value: 1, label: 'Presse Hydraulique PH-001', type: 'Presse', priority: 'elevee' },
+  { value: 2, label: 'Malaxeur MLX-002', type: 'Malaxeur', priority: 'moyenne' },
+  { value: 3, label: 'Convoyeur CV-003', type: 'Convoyeur', priority: 'moyenne' },
+  { value: 4, label: 'Four Séchage FS-004', type: 'Four', priority: 'moyenne' },
+  { value: 5, label: 'Pompe Principale PP-005', type: 'Pompe', priority: 'moyenne' },
+  { value: 6, label: 'Compresseur CP-006', type: 'Compresseur', priority: 'moyenne' },
+  { value: 9, label: 'Centrale à Béton Principal', type: 'Production', priority: 'elevee' },
+  { value: 10, label: 'Malaxeur Industriel 2500L', type: 'Production', priority: 'elevee' },
+  { value: 11, label: 'Système Dosage Automatique', type: 'Production', priority: 'elevee' },
+  { value: 19, label: 'Pont Roulant 10T-A', type: 'Manutention', priority: 'moyenne' },
+  { value: 21, label: 'Chariot Élévateur Diesel', type: 'Manutention', priority: 'moyenne' },
+  { value: 27, label: 'Compresseur Atlas 30kW', type: 'Utilité', priority: 'moyenne' },
+  { value: 29, label: 'Groupe Électrogène 500kVA', type: 'Utilité', priority: 'elevee' },
+  { value: 28, label: 'Compresseur Backup 15kW', type: 'Utilité', priority: 'basse' },
+  { value: 30, label: 'Presse Compression', type: 'Laboratoire', priority: 'basse' },
+  { value: 31, label: 'Étuve Séchage', type: 'Laboratoire', priority: 'basse' },
+  { value: 32, label: 'Tamiseuse', type: 'Laboratoire', priority: 'basse' },
+  { value: 22, label: 'Chariot Élévateur Électrique', type: 'Manutention', priority: 'basse' }
+]);
       }
     };
 
     fetchEquipments();
+    fetchNotificationCount();
+    
+    // Update notification count every 30 seconds
+    const interval = setInterval(fetchNotificationCount, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  const determinePriority = (equipmentType) => {
+    const priorityMap = {
+      'production': 'elevee',
+      'transport': 'moyenne',
+      'utilité': 'basse',
+      'default': 'moyenne'
+    };
+    return priorityMap[equipmentType] || priorityMap.default;
+  };
 
   const stopTypes = [
     { value: 'AM', label: 'Arrêt de Maintenance (AM)', description: 'Maintenance préventive ou corrective' },
@@ -43,14 +101,14 @@ const OperatorInterface = () => {
     { value: 'CM', label: 'Changement de Moule (CM)', description: 'Changement d\'outillage' },
   ];
 
-  const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
+  const selectedEquipment = equipments.find(eq => eq.value === parseInt(formData.equipment));
 
   const detectInterventionType = (description) => {
     const keywords = {
-      MECANIQUE: ['fuite', 'usure', 'cassé', 'bloqué', 'vibration', 'bruit', 'graissage', 'roulement', 'courroie'],
-      ELECTRIQUE: ['court-circuit', 'fusible', 'câble', 'moteur', 'électrique', 'tension', 'disjoncteur', 'capteur'],
-      PNEUMATIQUE: ['pression', 'air', 'vérin', 'pneumatique', 'compresseur', 'fuite d\'air'],
-      HYDRAULIQUE: ['huile', 'hydraulique', 'pompe', 'vérin hydraulique', 'pression hydraulique', 'fuite d\'huile'],
+      mecanique: ['fuite', 'usure', 'cassé', 'bloqué', 'vibration', 'bruit', 'graissage', 'roulement', 'courroie'],
+      electrique: ['court-circuit', 'fusible', 'câble', 'moteur', 'électrique', 'tension', 'disjoncteur', 'capteur'],
+      pneumatique: ['pression', 'air', 'vérin', 'pneumatique', 'compresseur', 'fuite d\'air'],
+      hydraulique: ['huile', 'hydraulique', 'pompe', 'vérin hydraulique', 'pression hydraulique', 'fuite d\'huile'],
     };
 
     const desc = description.toLowerCase();
@@ -59,7 +117,7 @@ const OperatorInterface = () => {
         return type;
       }
     }
-    return 'MECANIQUE';
+    return 'mecanique';
   };
 
   const handleInputChange = (e) => {
@@ -88,7 +146,12 @@ const OperatorInterface = () => {
       return;
     }
 
-    const selectedEquipment = equipments.find(eq => eq.value === formData.equipment);
+    if (!formData.demandeurNom || !formData.demandeurEmail) {
+      alert('Veuillez renseigner vos informations de contact.');
+      return;
+    }
+
+    const selectedEquipment = equipments.find(eq => eq.value === parseInt(formData.equipment));
     if (!selectedEquipment) {
       alert("Équipement non trouvé.");
       return;
@@ -98,27 +161,37 @@ const OperatorInterface = () => {
     setLoading(true);
 
     try {
-      const response = await interventionApi.createIntervention({
+      const interventionData = {
         equipement_id: selectedEquipment.value,
         type_arret: formData.stopType,
         description: formData.description,
-        priorite: selectedEquipment.priority.toLowerCase(),
-        type_probleme: detectedType.toLowerCase(),
-        demandeur_nom: "Demandeur Anonyme", // Since no user is required for demandeur interface
-        demandeur_email: "demandeur@carriprefa.com"
-      });
+        priorite: selectedEquipment.priority,
+        type_probleme: detectedType,
+        demandeur_nom: formData.demandeurNom,
+        demandeur_email: formData.demandeurEmail,
+        demandeur_telephone: formData.demandeurTelephone || null,
+        photo_path: null
+      };
 
-      alert('Demande d\'intervention créée avec succès !');
+      const response = await interventionApi.createIntervention(interventionData);
+
+      setInterventionRef(response.data.reference);
+      setSubmitted(true);
+      
+      // Refresh notification count
+      fetchNotificationCount();
       
       // Reset form
       setFormData({ 
         stopType: '', 
         equipment: '', 
         description: '', 
-        photo: null 
+        photo: null,
+        demandeurNom: '',
+        demandeurEmail: '',
+        demandeurTelephone: '',
       });
       
-      // Reset file input
       const fileInput = document.getElementById('photo-upload');
       if (fileInput) fileInput.value = '';
       
@@ -134,13 +207,28 @@ const OperatorInterface = () => {
     }
   };
 
-  return (
-    <div className="operator-interface">
-      <div className="interface-header">
-        <h2>🔧 Interface Demandeur</h2>
-        <p>Créer une nouvelle demande d'intervention</p>
-      </div>
+  const handleNewRequest = () => {
+    setSubmitted(false);
+    setInterventionRef('');
+  };
 
+  const renderSuccessMessage = () => (
+    <div className="success-message">
+      <div className="success-icon">✅</div>
+      <h2>Demande d'intervention créée avec succès!</h2>
+      <div className="reference-info">
+        <p>Référence de votre demande:</p>
+        <div className="reference-number">{interventionRef}</div>
+        <p>Vous pouvez utiliser cette référence pour suivre l'avancement de votre demande.</p>
+      </div>
+      <button onClick={handleNewRequest} className="new-request-button">
+        ➕ Nouvelle demande
+      </button>
+    </div>
+  );
+
+  const renderRequestForm = () => (
+    <div className="operator-content">
       <form onSubmit={handleSubmit} className="intervention-form">
         <div className="form-section">
           <label className="form-label">Type d'arrêt <span className="required">*</span></label>
@@ -216,6 +304,53 @@ const OperatorInterface = () => {
           )}
         </div>
 
+       <div className="form-section">
+  <label className="form-label demandeur-label" htmlFor="demandeurNom">
+    Nom du demandeur <span className="required">*</span>
+  </label>
+  <input
+    type="text"
+    id="demandeurNom"
+    name="demandeurNom"
+    value={formData.demandeurNom}
+    onChange={handleInputChange}
+    placeholder="Votre nom complet"
+    className="form-input"
+    required
+  />
+</div>
+
+<div className="form-section">
+  <label className="form-label demandeur-label" htmlFor="demandeurEmail">
+    Email du demandeur <span className="required">*</span>
+  </label>
+  <input
+    type="email"
+    id="demandeurEmail"
+    name="demandeurEmail"
+    value={formData.demandeurEmail}
+    onChange={handleInputChange}
+    placeholder="votre.email@example.com"
+    className="form-input"
+    required
+  />
+</div>
+
+<div className="form-section">
+  <label className="form-label optional-label" htmlFor="demandeurTelephone">
+    Téléphone du demandeur (optionnel)
+  </label>
+  <input
+    type="tel"
+    id="demandeurTelephone"
+    name="demandeurTelephone"
+    value={formData.demandeurTelephone}
+    onChange={handleInputChange}
+    placeholder="06 XX XX XX XX"
+    className="form-input"
+  />
+</div>
+
         <div className="form-section">
           <label className="form-label" htmlFor="photo-upload">Photo (optionnel)</label>
           <div className="photo-upload-container">
@@ -245,6 +380,44 @@ const OperatorInterface = () => {
           )}
         </button>
       </form>
+    </div>
+  );
+
+  return (
+    <div className="operator-interface">
+      {/* Header with title and navigation buttons */}
+      <div className="interface-header">
+        <h1 className="interface-title">Operator Interface</h1>
+        <div className="header-buttons">
+          <button 
+            className={`header-button ${currentView === 'demande' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('demande');
+              setSubmitted(false);
+            }}
+          >
+            📝 Demande
+          </button>
+          <button 
+            className={`header-button notification-button ${currentView === 'notifications' ? 'active' : ''}`}
+            onClick={() => setCurrentView('notifications')}
+          >
+            🔔 Notifications
+            {notificationCount > 0 && (
+              <span className="notification-badge">{notificationCount}</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Content based on current view */}
+      <div className="interface-content">
+        {currentView === 'notifications' ? (
+          <NotificationsInterface />
+        ) : (
+          submitted ? renderSuccessMessage() : renderRequestForm()
+        )}
+      </div>
     </div>
   );
 };

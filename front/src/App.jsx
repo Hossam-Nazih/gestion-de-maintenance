@@ -15,8 +15,24 @@ function App() {
   const [selectedInterface, setSelectedInterface] = useState(null);
   const [activeTab, setActiveTab] = useState('operator');
   const [showAuth, setShowAuth] = useState(false);
+  const [isNavbarHidden, setIsNavbarHidden] = useState(false);
 
-  // Fetch equipment statuses from API
+  // Detect scroll direction to hide/show navbar
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const isScrollingDown = currentScrollY > lastScrollY && currentScrollY > 100;
+
+      setIsNavbarHidden(isScrollingDown);
+      lastScrollY = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const { data: equipmentStatuses = [], refetch: refetchEquipmentStatuses } = useQuery({
     queryKey: ['equipmentStatuses'],
     queryFn: async () => {
@@ -36,11 +52,10 @@ function App() {
     },
     refetchInterval: 30000,
     retry: 1,
-    enabled: selectedInterface !== null // Only fetch when interface is selected
+    enabled: selectedInterface !== null
   });
 
   useEffect(() => {
-    // Check if user is already logged in
     const savedUser = localStorage.getItem('carriprefa_user');
     const savedInterface = localStorage.getItem('carriprefa_interface');
     
@@ -48,33 +63,28 @@ function App() {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
-        
-        // Verify session is still valid only if we have a token
+
         if (parsedUser.token) {
           authApi.getProfile()
-            .catch(() => {
-              // If session is invalid, logout
-              handleLogout();
-            });
+            .catch(() => handleLogout());
         }
       } catch (e) {
         console.error('Error parsing saved user:', e);
         localStorage.removeItem('carriprefa_user');
       }
     }
-    
+
     if (savedInterface) {
       setSelectedInterface(savedInterface);
     }
   }, []);
 
   const handleLogin = async (userData) => {
-    try {      
+    try {
       setUser(userData);
       localStorage.setItem('carriprefa_user', JSON.stringify(userData));
       setShowAuth(false);
-      
-      // If we were trying to access maintenance interface, redirect there
+
       if (selectedInterface === 'maintenance') {
         setActiveTab('maintenance');
       }
@@ -86,7 +96,6 @@ function App() {
   };
 
   const handleInterfaceSelect = (interfaceType) => {
-    // If selecting maintenance interface without being logged in, show auth
     if (interfaceType === 'maintenance' && !user) {
       setSelectedInterface(interfaceType);
       setShowAuth(true);
@@ -97,8 +106,7 @@ function App() {
     setSelectedInterface(interfaceType);
     setShowAuth(false);
     localStorage.setItem('carriprefa_interface', interfaceType);
-    
-    // Set default tab based on interface
+
     switch (interfaceType) {
       case 'demandeur':
         setActiveTab('operator');
@@ -145,52 +153,68 @@ function App() {
     }
   };
 
-  // If we need to show auth interface
+  // Helper function to get user display name
+  const getUserDisplayName = (user) => {
+    if (!user) return '';
+    
+    // Extract name from email if it follows a pattern like firstname.lastname@domain.com
+    if (user.email && user.email.includes('@')) {
+      const emailPart = user.email.split('@')[0];
+      if (emailPart.includes('.')) {
+        const parts = emailPart.split('.');
+        return parts.map(part => 
+          part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+        ).join(' ');
+      }
+    }
+    
+    // Fallback to username
+    return user.username || user.email;
+  };
+
+  // Helper function to get user role display
+  const getUserRoleDisplay = (user) => {
+    if (!user || !user.role) return '';
+    
+    switch (user.role.toLowerCase()) {
+      case 'technicien':
+        return 'Technicien';
+      case 'admin':
+        return 'Administrateur';
+      case 'operator':
+        return 'Opérateur';
+      default:
+        return user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase();
+    }
+  };
+
   if (showAuth) {
     return <AuthInterface onLogin={handleLogin} onBack={handleBackFromAuth} />;
   }
 
-  // If no interface selected, show selector
   if (!selectedInterface) {
     return <InterfaceSelector onSelect={handleInterfaceSelect} user={user} />;
   }
 
-  // Define tabs based on selected interface
   const getTabsForInterface = () => {
     const tabs = [];
-    
+
     if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
-      tabs.push({ 
-        id: 'operator', 
-        label: selectedInterface === 'admin' ? 'Interface Demandeur' : 'Nouvelle Demande', 
-        icon: '📝',
-      });
+      tabs.push({ id: 'operator', label: selectedInterface === 'admin' ? 'Interface Demandeur' : 'Nouvelle Demande', icon: '📝' });
     }
-    
+
     if (selectedInterface === 'maintenance' || selectedInterface === 'admin') {
-      tabs.push({ 
-        id: 'maintenance', 
-        label: 'Équipe Maintenance', 
-        icon: '🔧',
-      });
+      tabs.push({ id: 'maintenance', label: 'Équipe Maintenance', icon: '🔧' });
     }
-    
+
     if (selectedInterface === 'admin') {
-      tabs.push({ 
-        id: 'analytics', 
-        label: 'Tableau de Bord', 
-        icon: '📊',
-      });
+      tabs.push({ id: 'analytics', label: 'Tableau de Bord', icon: '📊' });
     }
-    
+
     if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
-      tabs.push({ 
-        id: 'notifications', 
-        label: 'Notifications', 
-        icon: '🔔',
-      });
+      tabs.push({ id: 'notifications', label: 'Notifications', icon: '🔔' });
     }
-    
+
     return tabs;
   };
 
@@ -245,7 +269,7 @@ function App() {
         <EquipmentStatusBar equipmentStatuses={equipmentStatuses} />
       )}
       
-      <nav className="navbar">
+      <nav className={`navbar ${isNavbarHidden ? 'hide-navbar' : ''}`}>
         <div className="nav-brand">
           <div className="company-header">
             <div className="company-logo">🏗️</div>
@@ -278,11 +302,8 @@ function App() {
             {showUserActions && user && (
               <div className="user-info">
                 <div className="user-details">
-                  <span className="user-name">{user.firstName || user.username} {user.lastName || ''}</span>
-                  <span className="user-role">
-                    {user.role === 'OPERATOR' ? 'Opérateur' : 
-                     user.role === 'MAINTENANCE' ? 'Maintenance' : 'Administrateur'}
-                  </span>
+                  <span className="user-name">{getUserDisplayName(user)}</span>
+                  <span className="user-role">{getUserRoleDisplay(user)}</span>
                 </div>
               </div>
             )}

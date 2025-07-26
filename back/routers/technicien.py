@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status as http_status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from typing import List, Optional
@@ -32,18 +32,24 @@ async def get_my_interventions(
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get interventions that I have created treatments for"""
-    # Use subquery for better performance
-    intervention_subquery = db.query(Traitement.intervention_id).filter(
-        Traitement.technicien_id == current_user.id
-    ).distinct().subquery()
-    
-    interventions = db.query(Intervention).filter(
-        Intervention.id.in_(intervention_subquery)
-    ).options(
-        joinedload(Intervention.equipement)
-    ).order_by(desc(Intervention.created_at)).all()
-    
-    return interventions
+    try:
+        # Use subquery for better performance
+        intervention_subquery = db.query(Traitement.intervention_id).filter(
+            Traitement.technicien_id == current_user.id
+        ).distinct().subquery()
+        
+        interventions = db.query(Intervention).filter(
+            Intervention.id.in_(intervention_subquery)
+        ).options(
+            joinedload(Intervention.equipement)
+        ).order_by(desc(Intervention.created_at)).all()
+        
+        return interventions
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving interventions: {str(e)}"
+        )
 
 # GET ALL INTERVENTIONS (for treatment)
 @router.get("/available-interventions", response_model=List[InterventionResponse])
@@ -52,11 +58,17 @@ async def get_available_interventions(
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get all interventions available for treatment"""
-    interventions = db.query(Intervention).options(
-        joinedload(Intervention.equipement)
-    ).order_by(desc(Intervention.created_at)).all()
-    
-    return interventions
+    try:
+        interventions = db.query(Intervention).options(
+            joinedload(Intervention.equipement)
+        ).order_by(desc(Intervention.created_at)).all()
+        
+        return interventions
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving available interventions: {str(e)}"
+        )
 
 # GET SPECIFIC INTERVENTION
 @router.get("/interventions/{intervention_id}", response_model=InterventionResponse)
@@ -66,23 +78,31 @@ async def get_intervention(
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get specific intervention"""
-    intervention = db.query(Intervention).options(
-        joinedload(Intervention.equipement)
-    ).filter(Intervention.id == intervention_id).first()
-    
-    if not intervention:
+    try:
+        intervention = db.query(Intervention).options(
+            joinedload(Intervention.equipement)
+        ).filter(Intervention.id == intervention_id).first()
+        
+        if not intervention:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Intervention not found"
+            )
+        
+        return intervention
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intervention not found"
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving intervention: {str(e)}"
         )
-    
-    return intervention
 
 # GET INTERVENTIONS STATUS (Simple version - only equipments with problems)
+# GET INTERVENTIONS STATUS (Simple version - only equipments with problems) - NO AUTH
 @router.get("/interventions-status-simple")
 async def get_interventions_status_simple(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_simple)
+    db: Session = Depends(get_db)
 ):
     """Get only equipments that have interventions (equipments with problems) and their status"""
     try:
@@ -122,8 +142,8 @@ async def get_interventions_status_simple(
         # Count status summary
         status_summary = {}
         for equipment in equipment_list:
-            status = equipment["current_status"]
-            status_summary[status] = status_summary.get(status, 0) + 1
+            equipment_status = equipment["current_status"]
+            status_summary[equipment_status] = status_summary.get(equipment_status, 0) + 1
         
         return {
             "message": "Equipments with problems retrieved successfully",
@@ -134,15 +154,14 @@ async def get_interventions_status_simple(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving equipments with problems: {str(e)}"
         )
 
-# GET INTERVENTIONS STATUS - Display all interventions with equipment and status
+# GET INTERVENTIONS STATUS - Display all interventions with equipment and status - NO AUTH
 @router.get("/interventions-status")
 async def get_interventions_status(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_simple)
+    db: Session = Depends(get_db)
 ):
     """Get all interventions with their equipment information and current status"""
     try:
@@ -153,67 +172,89 @@ async def get_interventions_status(
         
         intervention_status_list = []
         for intervention in interventions:
-            # Get the latest treatment for this intervention
-            latest_traitement = db.query(Traitement).filter(
-                Traitement.intervention_id == intervention.id
-            ).order_by(desc(Traitement.created_at)).first()
-            
-            # Safely get intervention attributes with fallbacks
-            intervention_data = {
-                "intervention_id": intervention.id,
-                "intervention_title": getattr(intervention, 'titre', 
-                                            getattr(intervention, 'title', 
-                                                   getattr(intervention, 'name', 'N/A'))),
-                "intervention_description": getattr(intervention, 'description', 'N/A'),
-                "intervention_status": getattr(intervention, 'statut', 'unknown'),
-                "intervention_priority": getattr(intervention, 'priorite', 
-                                               getattr(intervention, 'priority', None)),
-                "intervention_date": getattr(intervention, 'created_at', None),
-                "intervention_updated": getattr(intervention, 'updated_at', None),
-                "equipement_id": getattr(intervention, 'equipement_id', None),
-                "equipment_info": None,
-                "latest_treatment": None
-            }
-            
-            # Safely get equipment information
-            if hasattr(intervention, 'equipement') and intervention.equipement:
-                equipment = intervention.equipement
-                intervention_data["equipment_info"] = {
-                    "equipment_id": getattr(equipment, 'id', None),
-                    "equipment_name": getattr(equipment, 'nom', 
-                                            getattr(equipment, 'name', None)),
-                    "equipment_type": getattr(equipment, 'type', None),
-                    "equipment_model": getattr(equipment, 'modele', 
-                                             getattr(equipment, 'model', None)),
-                    "equipment_brand": getattr(equipment, 'marque', 
-                                             getattr(equipment, 'brand', None)),
-                    "equipment_location": getattr(equipment, 'localisation', 
-                                                getattr(equipment, 'location', None)),
-                    "installation_date": getattr(equipment, 'date_installation', None)
+            try:
+                # Get the latest treatment for this intervention with error handling
+                latest_traitement = None
+                try:
+                    latest_traitement = db.query(Traitement).filter(
+                        Traitement.intervention_id == intervention.id
+                    ).order_by(desc(Traitement.created_at)).first()
+                except Exception as traitement_error:
+                    print(f"Warning: Error getting treatment for intervention {intervention.id}: {str(traitement_error)}")
+                    # Continue without treatment data
+                
+                # Safely get intervention attributes with fallbacks
+                intervention_data = {
+                    "intervention_id": intervention.id,
+                    "intervention_title": getattr(intervention, 'titre', 
+                                                getattr(intervention, 'title', 
+                                                       getattr(intervention, 'name', 'N/A'))),
+                    "intervention_description": getattr(intervention, 'description', 'N/A'),
+                    "intervention_status": getattr(intervention, 'statut', 'unknown'),
+                    "intervention_priority": getattr(intervention, 'priorite', 
+                                                   getattr(intervention, 'priority', None)),
+                    "intervention_date": getattr(intervention, 'created_at', None),
+                    "intervention_updated": getattr(intervention, 'updated_at', None),
+                    "equipement_id": getattr(intervention, 'equipement_id', None),
+                    "equipment_info": None,
+                    "latest_treatment": None
                 }
-            
-            # Safely get treatment information
-            if latest_traitement:
-                intervention_data["latest_treatment"] = {
-                    "treatment_id": getattr(latest_traitement, 'id', None),
-                    "technician_id": getattr(latest_traitement, 'technicien_id', None),
-                    "treatment_date": getattr(latest_traitement, 'created_at', None),
-                    "repair_duration": getattr(latest_traitement, 'duree_fixation', None),
-                    "machine_downtime": getattr(latest_traitement, 'heures_arret_machine', None),
-                    "repair_description": getattr(latest_traitement, 'description_reparation', None),
-                    "parts_changed": getattr(latest_traitement, 'pieces_changees', None),
-                    "fix_type": getattr(latest_traitement, 'type_fixation', None),
-                    "specialist_transfer": getattr(latest_traitement, 'transfert_specialiste', None),
-                    "final_status": getattr(latest_traitement, 'statut_final', None)
-                }
-            
-            intervention_status_list.append(intervention_data)
+                
+                # Safely get equipment information
+                if hasattr(intervention, 'equipement') and intervention.equipement:
+                    equipment = intervention.equipement
+                    intervention_data["equipment_info"] = {
+                        "equipment_id": getattr(equipment, 'id', None),
+                        "equipment_name": getattr(equipment, 'nom', 
+                                                getattr(equipment, 'name', None)),
+                        "equipment_type": getattr(equipment, 'type', None),
+                        "equipment_model": getattr(equipment, 'modele', 
+                                                 getattr(equipment, 'model', None)),
+                        "equipment_brand": getattr(equipment, 'marque', 
+                                                 getattr(equipment, 'brand', None)),
+                        "equipment_location": getattr(equipment, 'localisation', 
+                                                    getattr(equipment, 'location', None)),
+                        "installation_date": getattr(equipment, 'date_installation', None)
+                    }
+                
+                # Safely get treatment information
+                if latest_traitement:
+                    intervention_data["latest_treatment"] = {
+                        "treatment_id": getattr(latest_traitement, 'id', None),
+                        "technician_id": getattr(latest_traitement, 'technicien_id', None),
+                        "treatment_date": getattr(latest_traitement, 'created_at', None),
+                        "repair_duration": getattr(latest_traitement, 'duree_fixation', None),
+                        "machine_downtime": getattr(latest_traitement, 'heures_arret_machine', None),
+                        "repair_description": getattr(latest_traitement, 'description_reparation', None),
+                        "parts_changed": getattr(latest_traitement, 'pieces_changees', None),
+                        "fix_type": getattr(latest_traitement, 'type_fixation', None),
+                        "specialist_transfer": getattr(latest_traitement, 'transfert_specialiste', None),
+                        "final_status": getattr(latest_traitement, 'statut_final', None)
+                    }
+                
+                intervention_status_list.append(intervention_data)
+                
+            except Exception as individual_error:
+                print(f"Warning: Error processing intervention {intervention.id}: {str(individual_error)}")
+                # Add basic intervention data even if there's an error
+                intervention_status_list.append({
+                    "intervention_id": intervention.id,
+                    "intervention_title": getattr(intervention, 'titre', 'N/A'),
+                    "intervention_description": "Error loading details",
+                    "intervention_status": "error",
+                    "intervention_priority": None,
+                    "intervention_date": getattr(intervention, 'created_at', None),
+                    "intervention_updated": None,
+                    "equipement_id": getattr(intervention, 'equipement_id', None),
+                    "equipment_info": None,
+                    "latest_treatment": None
+                })
         
         # Calculate status summary
         status_counts = {}
         for intervention in intervention_status_list:
-            status = intervention["intervention_status"]
-            status_counts[status] = status_counts.get(status, 0) + 1
+            intervention_status = intervention["intervention_status"]
+            status_counts[intervention_status] = status_counts.get(intervention_status, 0) + 1
         
         return {
             "message": "Interventions status retrieved successfully",
@@ -224,111 +265,120 @@ async def get_interventions_status(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving interventions status: {str(e)}"
         )
-
-# GET ALL EQUIPMENTS WITH THEIR STATUS (Optimized)
 @router.get("/equipments-status")
 async def get_equipments_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get all equipments with their current status"""
-    # Use a more efficient query with subquery for latest interventions
-    latest_interventions_subquery = db.query(
-        Intervention.equipement_id,
-        Intervention.id,
-        Intervention.statut,
-        Intervention.created_at
-    ).distinct(Intervention.equipement_id).order_by(
-        Intervention.equipement_id, 
-        desc(Intervention.created_at)
-    ).subquery()
-    
-    equipments = db.query(Equipement).outerjoin(
-        latest_interventions_subquery,
-        Equipement.id == latest_interventions_subquery.c.equipement_id
-    ).order_by(Equipement.nom).all()
-    
-    equipment_status_list = []
-    for equipment in equipments:
-        # Get the latest intervention for this equipment more efficiently
-        latest_intervention = db.query(Intervention).filter(
-            Intervention.equipement_id == equipment.id
-        ).order_by(desc(Intervention.created_at)).first()
+    try:
+        equipments = db.query(Equipement).order_by(Equipement.nom).all()
         
-        equipment_status = "operational"
-        last_intervention_date = None
-        last_intervention_id = None
+        equipment_status_list = []
+        for equipment in equipments:
+            try:
+                # Get the latest intervention for this equipment more efficiently
+                latest_intervention = db.query(Intervention).filter(
+                    Intervention.equipement_id == equipment.id
+                ).order_by(desc(Intervention.created_at)).first()
+                
+                equipment_status = "operational"
+                last_intervention_date = None
+                last_intervention_id = None
+                
+                if latest_intervention:
+                    equipment_status = getattr(latest_intervention, 'statut', 'operational')
+                    last_intervention_date = getattr(latest_intervention, 'created_at', None)
+                    last_intervention_id = getattr(latest_intervention, 'id', None)
+                
+                equipment_status_list.append({
+                    "equipment_id": equipment.id,
+                    "equipment_name": getattr(equipment, 'nom', 'Unknown'),
+                    "equipment_type": getattr(equipment, 'type', None),
+                    "equipment_model": getattr(equipment, 'modele', None),
+                    "equipment_brand": getattr(equipment, 'marque', None),
+                    "location": getattr(equipment, 'localisation', None),
+                    "current_status": equipment_status,
+                    "last_intervention_date": last_intervention_date,
+                    "last_intervention_id": last_intervention_id,
+                    "installation_date": getattr(equipment, 'date_installation', None)
+                })
+            except Exception as individual_error:
+                print(f"Warning: Error processing equipment {equipment.id}: {str(individual_error)}")
+                # Add basic equipment data
+                equipment_status_list.append({
+                    "equipment_id": equipment.id,
+                    "equipment_name": getattr(equipment, 'nom', 'Unknown'),
+                    "equipment_type": None,
+                    "equipment_model": None,
+                    "equipment_brand": None,
+                    "location": None,
+                    "current_status": "error",
+                    "last_intervention_date": None,
+                    "last_intervention_id": None,
+                    "installation_date": None
+                })
         
-        if latest_intervention:
-            equipment_status = latest_intervention.statut
-            last_intervention_date = latest_intervention.created_at
-            last_intervention_id = latest_intervention.id
-        
-        equipment_status_list.append({
-            "equipment_id": equipment.id,
-            "equipment_name": equipment.nom,
-            "equipment_type": equipment.type,
-            "equipment_model": equipment.modele,
-            "equipment_brand": equipment.marque,
-            "location": equipment.localisation,
-            "current_status": equipment_status,
-            "last_intervention_date": last_intervention_date,
-            "last_intervention_id": last_intervention_id,
-            "installation_date": equipment.date_installation
-        })
-    
-    return {
-        "message": "Equipment status retrieved successfully",
-        "total_equipments": len(equipment_status_list),
-        "equipments": equipment_status_list
-    }
+        return {
+            "message": "Equipment status retrieved successfully",
+            "total_equipments": len(equipment_status_list),
+            "equipments": equipment_status_list
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving equipment status: {str(e)}"
+        )
 
-# GET EQUIPMENT STATUS SUMMARY (Optimized)
+# GET EQUIPMENT STATUS SUMMARY (Fixed)
 @router.get("/equipments-status-summary")
 async def get_equipments_status_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get summary of equipment statuses"""
-    # More efficient query using raw SQL or optimized SQLAlchemy
-    equipments = db.query(Equipement).all()
-    
-    status_counts = {
-        "operational": 0,
-        "en_attente": 0,
-        "en_cours": 0,
-        "terminee": 0,
-        "problematique": 0
-    }
-    
-    # Batch query for all latest interventions
-    equipment_ids = [eq.id for eq in equipments]
-    latest_interventions = {}
-    
-    for eq_id in equipment_ids:
-        latest_intervention = db.query(Intervention).filter(
-            Intervention.equipement_id == eq_id
-        ).order_by(desc(Intervention.created_at)).first()
+    try:
+        equipments = db.query(Equipement).all()
         
-        if latest_intervention:
-            latest_interventions[eq_id] = latest_intervention.statut
-    
-    for equipment in equipments:
-        equipment_status = latest_interventions.get(equipment.id, "operational")
+        # Define valid statuses with defaults
+        valid_statuses = ["operational", "en_attente", "en_cours", "terminee", "problematique", "annulee"]
+        status_counts = {status_name: 0 for status_name in valid_statuses}
         
-        if equipment_status in status_counts:
-            status_counts[equipment_status] += 1
-        else:
-            status_counts["operational"] += 1
-    
-    return {
-        "message": "Equipment status summary retrieved",
-        "total_equipments": len(equipments),
-        "status_summary": status_counts
-    }
+        for equipment in equipments:
+            try:
+                latest_intervention = db.query(Intervention).filter(
+                    Intervention.equipement_id == equipment.id
+                ).order_by(desc(Intervention.created_at)).first()
+                
+                if latest_intervention and hasattr(latest_intervention, 'statut') and latest_intervention.statut:
+                    equipment_status = latest_intervention.statut
+                else:
+                    equipment_status = "operational"
+                
+                # Ensure status is valid, default to operational if not
+                if equipment_status in status_counts:
+                    status_counts[equipment_status] += 1
+                else:
+                    print(f"Warning: Unknown status '{equipment_status}' for equipment {equipment.id}, defaulting to operational")
+                    status_counts["operational"] += 1
+                    
+            except Exception as individual_error:
+                print(f"Error processing equipment {equipment.id}: {str(individual_error)}")
+                status_counts["operational"] += 1
+        
+        return {
+            "message": "Equipment status summary retrieved",
+            "total_equipments": len(equipments),
+            "status_summary": status_counts
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving equipment status summary: {str(e)}"
+        )
 
 # CREATE TRAITEMENT (for any intervention)
 @router.post("/traitements")
@@ -338,18 +388,18 @@ async def create_traitement(
     current_user: User = Depends(get_current_user_simple)
 ):
     """Create a new traitement for any intervention"""
-    # Check if intervention exists
-    intervention = db.query(Intervention).filter(
-        Intervention.id == traitement_data.intervention_id
-    ).first()
-    
-    if not intervention:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intervention not found"
-        )
-    
     try:
+        # Check if intervention exists
+        intervention = db.query(Intervention).filter(
+            Intervention.id == traitement_data.intervention_id
+        ).first()
+        
+        if not intervention:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Intervention not found"
+            )
+        
         # Create traitement
         traitement = Traitement(
             technicien_id=current_user.id,
@@ -370,27 +420,35 @@ async def create_traitement(
             "intervention_id": intervention.id,
             "created_by": current_user.username
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Treatment creation failed: {str(e)}"
         )
 
-# GET MY TRAITEMENTS (Optimized)
+# GET MY TRAITEMENTS (Fixed)
 @router.get("/my-traitements", response_model=List[TraitementResponse])
 async def get_my_traitements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get all traitements created by current technicien"""
-    traitements = db.query(Traitement).options(
-        joinedload(Traitement.intervention)
-    ).filter(
-        Traitement.technicien_id == current_user.id
-    ).order_by(desc(Traitement.created_at)).all()
-    
-    return traitements
+    try:
+        traitements = db.query(Traitement).options(
+            joinedload(Traitement.intervention)
+        ).filter(
+            Traitement.technicien_id == current_user.id
+        ).order_by(desc(Traitement.created_at)).all()
+        
+        return traitements
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving treatments: {str(e)}"
+        )
 
 # UPDATE MY TRAITEMENT
 @router.put("/traitements/{traitement_id}")
@@ -401,19 +459,19 @@ async def update_my_traitement(
     current_user: User = Depends(get_current_user_simple)
 ):
     """Update my traitement with structured fields"""
-    # Find my traitement
-    traitement = db.query(Traitement).filter(
-        Traitement.id == traitement_id,
-        Traitement.technicien_id == current_user.id
-    ).first()
-    
-    if not traitement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Treatment not found or not created by you"
-        )
-    
     try:
+        # Find my traitement
+        traitement = db.query(Traitement).filter(
+            Traitement.id == traitement_id,
+            Traitement.technicien_id == current_user.id
+        ).first()
+        
+        if not traitement:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Treatment not found or not created by you"
+            )
+        
         updated_fields = {}
         update_data = traitement_update.dict(exclude_unset=True)
         
@@ -441,52 +499,77 @@ async def update_my_traitement(
             "updated_by": current_user.username,
             "updated_fields": updated_fields
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Update failed: {str(e)}"
         )
 
-# DASHBOARD - GET SUMMARY (Optimized)
+# DASHBOARD - GET SUMMARY (Fixed)
 @router.get("/dashboard")
 async def get_technicien_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_simple)
 ):
     """Get dashboard summary for technicien"""
-    # Use more efficient queries
-    total_interventions = db.query(Intervention).count()
-    
-    # Single query for all status counts
-    status_counts = {}
-    interventions = db.query(Intervention.statut).all()
-    
-    for status_tuple in interventions:
-        status = status_tuple[0]
-        status_counts[status] = status_counts.get(status, 0) + 1
-    
-    # Count my treatments
-    my_traitements_count = db.query(Traitement).filter(
-        Traitement.technicien_id == current_user.id
-    ).count()
-    
-    # Count interventions I have treated
-    my_treated_interventions = db.query(Traitement.intervention_id).filter(
-        Traitement.technicien_id == current_user.id
-    ).distinct().count()
-    
-    return {
-        "message": "Dashboard data retrieved",
-        "technicien": current_user.to_dict(),
-        "stats": {
-            "total_interventions": total_interventions,
-            "interventions_en_attente": status_counts.get('en_attente', 0),
-            "interventions_en_cours": status_counts.get('en_cours', 0),
-            "interventions_terminee": status_counts.get('terminee', 0),
-            "interventions_problematique": status_counts.get('problematique', 0),
-            "my_traitements_count": my_traitements_count,
-            "my_treated_interventions": my_treated_interventions,
-            "all_status_counts": status_counts
+    try:
+        # Use more efficient queries
+        total_interventions = db.query(Intervention).count()
+        
+        # Initialize status_counts with all possible statuses
+        status_counts = {
+            "en_attente": 0,
+            "en_cours": 0,
+            "terminee": 0,
+            "problematique": 0,
+            "annulee": 0
         }
-    }
+        
+        # Single query for all status counts with proper error handling
+        try:
+            interventions = db.query(Intervention.statut).all()
+            
+            for status_tuple in interventions:
+                # Safely extract status from tuple
+                if status_tuple and len(status_tuple) > 0:
+                    intervention_status = status_tuple[0]
+                    if intervention_status and intervention_status in status_counts:
+                        status_counts[intervention_status] += 1
+                    # If status is None or unknown, we don't count it
+        except Exception as status_error:
+            print(f"Warning: Error counting intervention statuses: {str(status_error)}")
+        
+        # Count my treatments
+        my_traitements_count = db.query(Traitement).filter(
+            Traitement.technicien_id == current_user.id
+        ).count()
+        
+        # Count interventions I have treated
+        my_treated_interventions = db.query(Traitement.intervention_id).filter(
+            Traitement.technicien_id == current_user.id
+        ).distinct().count()
+        
+        return {
+            "message": "Dashboard data retrieved",
+            "technicien": current_user.to_dict(),
+            "stats": {
+                "total_interventions": total_interventions,
+                "interventions_en_attente": status_counts.get('en_attente', 0),
+                "interventions_en_cours": status_counts.get('en_cours', 0),
+                "interventions_terminee": status_counts.get('terminee', 0),
+                "interventions_problematique": status_counts.get('problematique', 0),
+                "interventions_annulee": status_counts.get('annulee', 0),
+                "my_traitements_count": my_traitements_count,
+                "my_treated_interventions": my_treated_interventions,
+                "all_status_counts": status_counts
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving dashboard data: {str(e)}"
+        )

@@ -28,7 +28,8 @@ class StatutEnum(str, Enum):
     en_attente = "en_attente"     # Fixed: use lowercase values consistently
     en_cours = "en_cours"         # Fixed: use lowercase values consistently
     terminee = "terminee"         # Fixed: use lowercase values consistently
-    annulee = "annulee"           # Fixed: use lowercase values consistently
+    annulee = "annulee"
+    en_attente_piece = "en_attente_piece"           # Fixed: use lowercase values consistently
 
 
 class InterventionBase(BaseModel):

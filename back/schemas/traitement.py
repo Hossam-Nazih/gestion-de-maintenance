@@ -5,8 +5,11 @@ from enum import Enum
 
 
 class StatutFinalEnum(str, Enum):
-    terminee = "terminee"         # Fixed: use lowercase consistently
-    annulee = "annulee"           # Fixed: use lowercase consistently
+    terminee = "terminee"
+    annulee = "annulee"
+    en_cours = "en_cours"
+    reportee = "reportee"
+    en_attente = "en_attente"
 
 
 class TraitementBase(BaseModel):
@@ -18,6 +21,7 @@ class TraitementBase(BaseModel):
     type_fixation: Optional[str] = None
     transfert_specialiste: bool = False
     statut_final: StatutFinalEnum
+    
 
 
 class TraitementCreate(TraitementBase):

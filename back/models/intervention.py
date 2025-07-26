@@ -86,3 +86,4 @@ class Intervention(Base):
             'demandeur': self.demandeur.to_dict() if self.demandeur else None,
             'technicien': self.technicien.to_dict() if self.technicien else None
         }
+    

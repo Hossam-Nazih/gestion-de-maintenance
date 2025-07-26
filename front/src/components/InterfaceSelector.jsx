@@ -1,43 +1,41 @@
 import React from 'react';
 import './InterfaceSelector.css';
+import { technicienApi } from '../api';
 
-const InterfaceSelector = ({ onSelect, user }) => {
-  const interfaces = [
-    {
-      id: 'demandeur',
-      title: 'Interface Demandeur',
-      description: 'Créer et suivre vos demandes d\'intervention (Accès libre)',
-      icon: '📝',
-      color: '#3b82f6',
-      features: [
-        'Créer une nouvelle demande d\'intervention',
-        'Sélectionner le type d\'arrêt et l\'équipement',
-        'Ajouter une description détaillée',
-        'Joindre des photos (optionnel)',
-        'Recevoir des notifications en temps réel',
-        'Voir l\'état des équipements',
-        'Aucune authentification requise'
-      ]
-    },
-    {
-      id: 'maintenance',
-      title: 'Interface Maintenance',
-      description: 'Gérer et traiter les demandes d\'intervention (Connexion requise)',
-      icon: '🔧',
-      color: '#059669',
-      features: [
-        'Voir toutes les demandes d\'intervention',
-        'Traiter les demandes en cours',
-        'Ajouter la durée de fixation',
-        'Enregistrer les pièces changées',
-        'Transférer vers d\'autres spécialistes',
-        'Mettre à jour le statut des interventions',
-        'Authentification obligatoire'
-      ],
-      requiresAuth: true
-    }
-  ];
+// Define the interfaces array
+const interfaces = [
+  {
+    id: 'public',
+    title: 'Interface Publique',
+    description: 'Accès libre pour les visiteurs',
+    icon: '🌐',
+    color: '#3498db',
+    requiresAuth: false,
+    features: [
+      'Informations générales sur l\'entreprise',
+      'Catalogue des produits',
+      'Coordonnées et contact',
+      'Actualités et événements'
+    ]
+  },
 
+  {
+    id: 'maintenance',
+    title: 'Interface Maintenance',
+    description: 'Maintenance préventive et corrective',
+    icon: '🔧',
+    color: '#f39c12',
+    requiresAuth: true,
+    features: [
+      'Planification de la maintenance',
+      'Historique des interventions',
+      'Gestion des pièces de rechange',
+      'Diagnostic des pannes'
+    ]
+  },
+];
+
+const InterfaceSelector = ({ user, onSelect }) => {
   return (
     <div className="interface-selector">
       <div className="selector-background">
@@ -114,8 +112,8 @@ const InterfaceSelector = ({ onSelect, user }) => {
               <div className="user-details">
                 <span className="user-name">{user.firstName} {user.lastName}</span>
                 <span className="user-role">
-                  {user.role === 'OPERATOR' ? 'Opérateur' : 
-                   user.role === 'MAINTENANCE' ? 'Maintenance' : 'Administrateur'}
+                  {user.role === 'OPERATOR' ? 'Opérateur' :
+                    user.role === 'MAINTENANCE' ? 'Maintenance' : 'Administrateur'}
                 </span>
               </div>
             </div>

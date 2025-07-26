@@ -16,7 +16,23 @@ class Traitement(Base):
     pieces_changees = Column(Text)
     type_fixation = Column(String(100))
     transfert_specialiste = Column(Boolean, default=False)
-    statut_final = Column(Enum('terminee', 'annulee'), nullable=False)
+    STATUT_TERMINEE = "terminee"
+    STATUT_ANNULEE = "annulee"
+    STATUT_EN_COURS = "en_cours"
+    STATUT_REPORTEE = "reportee"
+    STATUT_EN_ATTENTE = "en_attente"
+
+    statut_final = Column(
+        Enum(
+            STATUT_TERMINEE,
+            STATUT_ANNULEE,
+            STATUT_EN_COURS,
+            STATUT_REPORTEE,
+            STATUT_EN_ATTENTE,
+            name="statutfinalenum"
+        ),
+        nullable=False
+    )
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
