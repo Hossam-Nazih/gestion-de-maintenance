@@ -1,11 +1,12 @@
 import './OperatorInterface.css';
 import React, { useState, useEffect } from 'react';
-import { equipmentApi } from '../api';
+import { equipmentApi, technicienApi } from '../api';
 import axios from 'axios';
 import { interventionApi } from '../api';
 import NotificationsInterface from './NotificationsInterface';
+import EquipmentStatusBar from './EquipmentStatusBar';
 
-const OperatorInterface = () => {
+const OperatorInterface = ({ equipmentStatuses = [] }) => {
   const [equipments, setEquipments] = useState([]);
   const [formData, setFormData] = useState({
     stopType: '',
@@ -25,12 +26,13 @@ const OperatorInterface = () => {
   // Fetch notification count
   const fetchNotificationCount = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/tech/interventions-status');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.interventions) {
-          const unreadCount = data.interventions.filter(intervention => 
-            intervention.intervention_status !== 'terminee'
+      const response = await technicienApi.getInterventionsStatus();
+      if (response.data) {
+        const interventions = response.data.interventions || response.data;
+        if (Array.isArray(interventions)) {
+          const unreadCount = interventions.filter(intervention => 
+            intervention.intervention_status !== 'terminee' && 
+            intervention.intervention_status !== 'completed'
           ).length;
           setNotificationCount(unreadCount);
         }
@@ -41,6 +43,8 @@ const OperatorInterface = () => {
   };
 
   useEffect(() => {
+    console.log('🚀 OperatorInterface useEffect triggered');
+    
     const fetchEquipments = async () => {
       try {
         const response = await equipmentApi.getEquipments();
@@ -53,6 +57,7 @@ const OperatorInterface = () => {
         })));
       } catch (error) {
         console.error("Impossible de charger la liste des équipements.", error);
+        // Fallback data
         setEquipments([
   { value: 1, label: 'Presse Hydraulique PH-001', type: 'Presse', priority: 'elevee' },
   { value: 2, label: 'Malaxeur MLX-002', type: 'Malaxeur', priority: 'moyenne' },
@@ -76,12 +81,24 @@ const OperatorInterface = () => {
       }
     };
 
-    fetchEquipments();
-    fetchNotificationCount();
+    const initializeData = async () => {
+      console.log('📋 Initializing operator interface data...');
+      await fetchEquipments();
+      await fetchNotificationCount();
+    };
+
+    initializeData();
     
     // Update notification count every 30 seconds
-    const interval = setInterval(fetchNotificationCount, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      console.log('🔄 Interval refresh triggered');
+      fetchNotificationCount();
+    }, 30000);
+    
+    return () => {
+      console.log('🧹 Cleaning up interval');
+      clearInterval(interval);
+    };
   }, []);
 
   const determinePriority = (equipmentType) => {
@@ -304,52 +321,52 @@ const OperatorInterface = () => {
           )}
         </div>
 
-       <div className="form-section">
-  <label className="form-label demandeur-label" htmlFor="demandeurNom">
-    Nom du demandeur <span className="required">*</span>
-  </label>
-  <input
-    type="text"
-    id="demandeurNom"
-    name="demandeurNom"
-    value={formData.demandeurNom}
-    onChange={handleInputChange}
-    placeholder="Votre nom complet"
-    className="form-input"
-    required
-  />
-</div>
+        <div className="form-section">
+          <label className="form-label demandeur-label" htmlFor="demandeurNom">
+            Nom du demandeur <span className="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="demandeurNom"
+            name="demandeurNom"
+            value={formData.demandeurNom}
+            onChange={handleInputChange}
+            placeholder="Votre nom complet"
+            className="form-input"
+            required
+          />
+        </div>
 
-<div className="form-section">
-  <label className="form-label demandeur-label" htmlFor="demandeurEmail">
-    Email du demandeur <span className="required">*</span>
-  </label>
-  <input
-    type="email"
-    id="demandeurEmail"
-    name="demandeurEmail"
-    value={formData.demandeurEmail}
-    onChange={handleInputChange}
-    placeholder="votre.email@example.com"
-    className="form-input"
-    required
-  />
-</div>
+        <div className="form-section">
+          <label className="form-label demandeur-label" htmlFor="demandeurEmail">
+            Email du demandeur <span className="required">*</span>
+          </label>
+          <input
+            type="email"
+            id="demandeurEmail"
+            name="demandeurEmail"
+            value={formData.demandeurEmail}
+            onChange={handleInputChange}
+            placeholder="votre.email@example.com"
+            className="form-input"
+            required
+          />
+        </div>
 
-<div className="form-section">
-  <label className="form-label optional-label" htmlFor="demandeurTelephone">
-    Téléphone du demandeur (optionnel)
-  </label>
-  <input
-    type="tel"
-    id="demandeurTelephone"
-    name="demandeurTelephone"
-    value={formData.demandeurTelephone}
-    onChange={handleInputChange}
-    placeholder="06 XX XX XX XX"
-    className="form-input"
-  />
-</div>
+        <div className="form-section">
+          <label className="form-label optional-label" htmlFor="demandeurTelephone">
+            Téléphone du demandeur (optionnel)
+          </label>
+          <input
+            type="tel"
+            id="demandeurTelephone"
+            name="demandeurTelephone"
+            value={formData.demandeurTelephone}
+            onChange={handleInputChange}
+            placeholder="06 XX XX XX XX"
+            className="form-input"
+          />
+        </div>
 
         <div className="form-section">
           <label className="form-label" htmlFor="photo-upload">Photo (optionnel)</label>
@@ -385,6 +402,9 @@ const OperatorInterface = () => {
 
   return (
     <div className="operator-interface">
+      {/* Use EquipmentStatusBar component for the notification */}
+      <EquipmentStatusBar />
+
       {/* Header with title and navigation buttons */}
       <div className="interface-header">
         <h1 className="interface-title">Operator Interface</h1>

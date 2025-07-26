@@ -265,8 +265,9 @@ function App() {
 
   return (
     <div className="app">
-      {selectedInterface === 'demandeur' && (
-        <EquipmentStatusBar equipmentStatuses={equipmentStatuses} />
+      {/* Only show the fixed EquipmentStatusBar for non-demandeur interfaces */}
+      {selectedInterface !== 'demandeur' && (
+        <EquipmentStatusBar equipmentStatuses={equipmentStatuses} showAsNotification={false} />
       )}
       
       <nav className={`navbar ${isNavbarHidden ? 'hide-navbar' : ''}`}>
