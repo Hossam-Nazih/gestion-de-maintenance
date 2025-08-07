@@ -59,7 +59,7 @@ const MaintenanceInterface = () => {
     }
   });
 
-  // Safe data extraction with extensive null checking
+  // FIXED: Enhanced data extraction with proper demandeur name handling
   const safeMapIntervention = useCallback((int) => {
     if (!int || typeof int !== 'object') {
       console.warn('Invalid intervention object:', int);
@@ -105,19 +105,53 @@ const MaintenanceInterface = () => {
       };
     }
 
+    // FIXED: Extract demandeur name from different possible sources
+    let demandeurName = 'Demandeur non spécifié';
+    
+    // Try to get demandeur name from various possible fields in the intervention data
+    if (int.demandeur_nom) {
+      demandeurName = String(int.demandeur_nom).trim();
+    } else if (int.demandeur_name) {
+      demandeurName = String(int.demandeur_name).trim();
+    } else if (int.operator_name) {
+      demandeurName = String(int.operator_name).trim();
+    } else if (int.demandeur_email) {
+      // Extract name from email if available
+      const emailPart = String(int.demandeur_email).split('@')[0];
+      if (emailPart.includes('.')) {
+        demandeurName = emailPart.split('.').map(part => 
+          part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+        ).join(' ');
+      } else {
+        demandeurName = emailPart;
+      }
+    } else if (int.demandeur && typeof int.demandeur === 'object') {
+      // If demandeur is an object, try to extract name from it
+      if (int.demandeur.nom) {
+        demandeurName = String(int.demandeur.nom).trim();
+      } else if (int.demandeur.name) {
+        demandeurName = String(int.demandeur.name).trim();
+      } else if (int.demandeur.username) {
+        demandeurName = String(int.demandeur.username).trim();
+      }
+    }
+
     const safeString = (value, fallback = '') => {
       return value !== null && value !== undefined ? String(value).trim() || fallback : fallback;
     };
 
     return {
       id: interventionId,
-      stopType: 'N/A',
+      stopType: safeString(int.type_arret || int.intervention_type_arret, 'N/A'),
       equipment: equipmentInfo,
-      interventionType: safeString(int.intervention_title, 'Intervention'),
+      interventionType: safeString(int.type_probleme || int.intervention_title, 'Intervention'),
       description: safeString(int.intervention_description, 'Aucune description'),
       timestamp: int.intervention_date || new Date().toISOString(),
       status: statusValue,
-      operator: safeString(int.operator_name, 'Non spécifié'),
+      // FIXED: Use the extracted demandeur name
+      operator: demandeurName,
+      demandeurEmail: safeString(int.demandeur_email),
+      demandeurTelephone: safeString(int.demandeur_telephone),
       treatment: int.latest_treatment || null,
       hasTraitement: Boolean(int.latest_treatment)
     };

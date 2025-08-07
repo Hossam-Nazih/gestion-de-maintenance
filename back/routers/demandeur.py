@@ -58,22 +58,6 @@ async def create_intervention_public(
         )
 
 
-@router.get("/intervention/{intervention_id}", response_model=InterventionResponse)
-async def get_intervention_public(
-    intervention_id: int,
-    db: Session = Depends(get_db)
-):
-    """Get intervention by ID - no auth required for tracking"""
-    intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
-    
-    if not intervention:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intervention non trouvée"
-        )
-    
-    return intervention
-
 
 @router.put("/intervention/{intervention_id}", response_model=dict)
 async def update_intervention_public(

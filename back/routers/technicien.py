@@ -98,8 +98,7 @@ async def get_intervention(
             detail=f"Error retrieving intervention: {str(e)}"
         )
 
-# GET INTERVENTIONS STATUS (Simple version - only equipments with problems)
-# GET INTERVENTIONS STATUS (Simple version - only equipments with problems) - NO AUTH
+
 @router.get("/interventions-status-simple")
 async def get_interventions_status_simple(
     db: Session = Depends(get_db)
@@ -159,6 +158,9 @@ async def get_interventions_status_simple(
         )
 
 # GET INTERVENTIONS STATUS - Display all interventions with equipment and status - NO AUTH
+# In your back/routers/technicien.py file
+# Update the get_interventions_status endpoint to include demandeur information
+
 @router.get("/interventions-status")
 async def get_interventions_status(
     db: Session = Depends(get_db)
@@ -183,7 +185,7 @@ async def get_interventions_status(
                     print(f"Warning: Error getting treatment for intervention {intervention.id}: {str(traitement_error)}")
                     # Continue without treatment data
                 
-                # Safely get intervention attributes with fallbacks
+                # Safely get intervention attributes with fallbacks - UPDATED TO INCLUDE DEMANDEUR INFO
                 intervention_data = {
                     "intervention_id": intervention.id,
                     "intervention_title": getattr(intervention, 'titre', 
@@ -196,6 +198,14 @@ async def get_interventions_status(
                     "intervention_date": getattr(intervention, 'created_at', None),
                     "intervention_updated": getattr(intervention, 'updated_at', None),
                     "equipement_id": getattr(intervention, 'equipement_id', None),
+                    
+                    # ADDED: Include demandeur information
+                    "demandeur_nom": getattr(intervention, 'demandeur_nom', None),
+                    "demandeur_email": getattr(intervention, 'demandeur_email', None),
+                    "demandeur_telephone": getattr(intervention, 'demandeur_telephone', None),
+                    "type_arret": getattr(intervention, 'type_arret', None),
+                    "type_probleme": getattr(intervention, 'type_probleme', None),
+                    
                     "equipment_info": None,
                     "latest_treatment": None
                 }
@@ -246,6 +256,14 @@ async def get_interventions_status(
                     "intervention_date": getattr(intervention, 'created_at', None),
                     "intervention_updated": None,
                     "equipement_id": getattr(intervention, 'equipement_id', None),
+                    
+                    # Include demandeur info even in error cases
+                    "demandeur_nom": getattr(intervention, 'demandeur_nom', None),
+                    "demandeur_email": getattr(intervention, 'demandeur_email', None),
+                    "demandeur_telephone": getattr(intervention, 'demandeur_telephone', None),
+                    "type_arret": getattr(intervention, 'type_arret', None),
+                    "type_probleme": getattr(intervention, 'type_probleme', None),
+                    
                     "equipment_info": None,
                     "latest_treatment": None
                 })
@@ -267,117 +285,6 @@ async def get_interventions_status(
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving interventions status: {str(e)}"
-        )
-@router.get("/equipments-status")
-async def get_equipments_status(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_simple)
-):
-    """Get all equipments with their current status"""
-    try:
-        equipments = db.query(Equipement).order_by(Equipement.nom).all()
-        
-        equipment_status_list = []
-        for equipment in equipments:
-            try:
-                # Get the latest intervention for this equipment more efficiently
-                latest_intervention = db.query(Intervention).filter(
-                    Intervention.equipement_id == equipment.id
-                ).order_by(desc(Intervention.created_at)).first()
-                
-                equipment_status = "operational"
-                last_intervention_date = None
-                last_intervention_id = None
-                
-                if latest_intervention:
-                    equipment_status = getattr(latest_intervention, 'statut', 'operational')
-                    last_intervention_date = getattr(latest_intervention, 'created_at', None)
-                    last_intervention_id = getattr(latest_intervention, 'id', None)
-                
-                equipment_status_list.append({
-                    "equipment_id": equipment.id,
-                    "equipment_name": getattr(equipment, 'nom', 'Unknown'),
-                    "equipment_type": getattr(equipment, 'type', None),
-                    "equipment_model": getattr(equipment, 'modele', None),
-                    "equipment_brand": getattr(equipment, 'marque', None),
-                    "location": getattr(equipment, 'localisation', None),
-                    "current_status": equipment_status,
-                    "last_intervention_date": last_intervention_date,
-                    "last_intervention_id": last_intervention_id,
-                    "installation_date": getattr(equipment, 'date_installation', None)
-                })
-            except Exception as individual_error:
-                print(f"Warning: Error processing equipment {equipment.id}: {str(individual_error)}")
-                # Add basic equipment data
-                equipment_status_list.append({
-                    "equipment_id": equipment.id,
-                    "equipment_name": getattr(equipment, 'nom', 'Unknown'),
-                    "equipment_type": None,
-                    "equipment_model": None,
-                    "equipment_brand": None,
-                    "location": None,
-                    "current_status": "error",
-                    "last_intervention_date": None,
-                    "last_intervention_id": None,
-                    "installation_date": None
-                })
-        
-        return {
-            "message": "Equipment status retrieved successfully",
-            "total_equipments": len(equipment_status_list),
-            "equipments": equipment_status_list
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving equipment status: {str(e)}"
-        )
-
-# GET EQUIPMENT STATUS SUMMARY (Fixed)
-@router.get("/equipments-status-summary")
-async def get_equipments_status_summary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_simple)
-):
-    """Get summary of equipment statuses"""
-    try:
-        equipments = db.query(Equipement).all()
-        
-        # Define valid statuses with defaults
-        valid_statuses = ["operational", "en_attente", "en_cours", "terminee", "problematique", "annulee"]
-        status_counts = {status_name: 0 for status_name in valid_statuses}
-        
-        for equipment in equipments:
-            try:
-                latest_intervention = db.query(Intervention).filter(
-                    Intervention.equipement_id == equipment.id
-                ).order_by(desc(Intervention.created_at)).first()
-                
-                if latest_intervention and hasattr(latest_intervention, 'statut') and latest_intervention.statut:
-                    equipment_status = latest_intervention.statut
-                else:
-                    equipment_status = "operational"
-                
-                # Ensure status is valid, default to operational if not
-                if equipment_status in status_counts:
-                    status_counts[equipment_status] += 1
-                else:
-                    print(f"Warning: Unknown status '{equipment_status}' for equipment {equipment.id}, defaulting to operational")
-                    status_counts["operational"] += 1
-                    
-            except Exception as individual_error:
-                print(f"Error processing equipment {equipment.id}: {str(individual_error)}")
-                status_counts["operational"] += 1
-        
-        return {
-            "message": "Equipment status summary retrieved",
-            "total_equipments": len(equipments),
-            "status_summary": status_counts
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving equipment status summary: {str(e)}"
         )
 
 # CREATE TRAITEMENT (for any intervention)
@@ -508,7 +415,7 @@ async def update_my_traitement(
             detail=f"Update failed: {str(e)}"
         )
 
-# DASHBOARD - GET SUMMARY (Fixed)
+
 @router.get("/dashboard")
 async def get_technicien_dashboard(
     db: Session = Depends(get_db),

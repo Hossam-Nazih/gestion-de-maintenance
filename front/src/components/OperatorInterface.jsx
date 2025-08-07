@@ -122,9 +122,9 @@ const OperatorInterface = ({ equipmentStatuses = [] }) => {
 
   const detectInterventionType = (description) => {
     const keywords = {
-      mecanique: ['fuite', 'usure', 'cassé', 'bloqué', 'vibration', 'bruit', 'graissage', 'roulement', 'courroie'],
-      electrique: ['court-circuit', 'fusible', 'câble', 'moteur', 'électrique', 'tension', 'disjoncteur', 'capteur'],
-      pneumatique: ['pression', 'air', 'vérin', 'pneumatique', 'compresseur', 'fuite d\'air'],
+      mecanique: ['fuite', 'usure', 'casse', 'bloqué', 'vibration', 'bruit', 'graissage', 'roulement', 'courroie'],
+      electrique: ['court circuit', 'fusible', 'cable', 'moteur', 'electrique', 'tension', 'disjoncteur', 'capteur'],
+      pneumatique: ['pression', 'air', 'vérin', 'pneumatique', 'compresseur', 'fuite dair'],
       hydraulique: ['huile', 'hydraulique', 'pompe', 'vérin hydraulique', 'pression hydraulique', 'fuite d\'huile'],
     };
 

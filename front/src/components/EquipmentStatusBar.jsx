@@ -142,9 +142,6 @@ const EquipmentStatusBar = ({ equipmentStatuses: propEquipmentStatuses, showAsNo
     if (!propEquipmentStatuses) {
       fetchEquipmentStatus();
       
-      // Auto-refresh every 30 seconds
-      const interval = setInterval(fetchEquipmentStatus, 30000);
-      return () => clearInterval(interval);
     }
   }, [propEquipmentStatuses, showAsNotification]);
 
@@ -367,12 +364,11 @@ const EquipmentStatusBar = ({ equipmentStatuses: propEquipmentStatuses, showAsNo
             <div 
               key={notification.id} 
               className={`equipment-notification individual-notification ${statusInfo.className}`}
-              style={{
-                top: `${20 + (index * 100)}px`, // Stack notifications vertically with 100px spacing
-                animationDelay: `${index * 0.3}s`, // Stagger animation by 0.3s
+              tyle={{
+                animationDelay: `${index * 0.3}s`,
                 '--bg-color': statusInfo.bgColor,
                 '--border-color': statusInfo.color
-              }}
+                   }}
             >
               <div className="notification-content">
                 <div className="notification-icon">

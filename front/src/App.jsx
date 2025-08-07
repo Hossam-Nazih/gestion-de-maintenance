@@ -55,9 +55,11 @@ function App() {
     enabled: selectedInterface !== null
   });
 
+  // UPDATED: Restore user, interface, and active tab from localStorage on component mount
   useEffect(() => {
     const savedUser = localStorage.getItem('carriprefa_user');
     const savedInterface = localStorage.getItem('carriprefa_interface');
+    const savedActiveTab = localStorage.getItem('carriprefa_active_tab'); // NEW: Get saved tab
     
     if (savedUser) {
       try {
@@ -76,8 +78,66 @@ function App() {
 
     if (savedInterface) {
       setSelectedInterface(savedInterface);
+      
+      // NEW: Restore the active tab if it was saved
+      if (savedActiveTab) {
+        setActiveTab(savedActiveTab);
+      } else {
+        // Fallback to default tab based on interface type
+        switch (savedInterface) {
+          case 'demandeur':
+            setActiveTab('operator');
+            break;
+          case 'maintenance':
+            setActiveTab('maintenance');
+            break;
+          case 'admin':
+            setActiveTab('analytics');
+            break;
+          default:
+            setActiveTab('operator');
+        }
+      }
     }
   }, []);
+
+  // Get available tabs for current interface
+  const getTabsForInterface = () => {
+    const tabs = [];
+
+    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
+      tabs.push({ id: 'operator', label: selectedInterface === 'admin' ? 'Interface Demandeur' : 'Nouvelle Demande', icon: '📝' });
+    }
+
+    if (selectedInterface === 'maintenance' || selectedInterface === 'admin') {
+      tabs.push({ id: 'maintenance', label: 'Équipe Maintenance', icon: '🔧' });
+    }
+
+    if (selectedInterface === 'admin') {
+      tabs.push({ id: 'analytics', label: 'Tableau de Bord', icon: '📊' });
+    }
+
+    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
+      tabs.push({ id: 'notifications', label: 'Notifications', icon: '🔔' });
+    }
+
+    return tabs;
+  };
+
+  const availableTabs = getTabsForInterface();
+
+  // FIXED: Always call this useEffect (not conditionally) to validate tabs
+  useEffect(() => {
+    // Only validate if we have both interface and available tabs
+    if (selectedInterface && availableTabs.length > 0) {
+      const isTabAvailable = availableTabs.some(tab => tab.id === activeTab);
+      if (!isTabAvailable) {
+        const firstAvailableTab = availableTabs[0].id;
+        setActiveTab(firstAvailableTab);
+        localStorage.setItem('carriprefa_active_tab', firstAvailableTab);
+      }
+    }
+  }, [selectedInterface, availableTabs.length, activeTab]); // Depend on length instead of full array
 
   const handleLogin = async (userData) => {
     try {
@@ -87,6 +147,7 @@ function App() {
 
       if (selectedInterface === 'maintenance') {
         setActiveTab('maintenance');
+        localStorage.setItem('carriprefa_active_tab', 'maintenance'); // NEW: Save tab
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -107,19 +168,24 @@ function App() {
     setShowAuth(false);
     localStorage.setItem('carriprefa_interface', interfaceType);
 
+    // NEW: Set and save the appropriate default tab for the interface
+    let defaultTab;
     switch (interfaceType) {
       case 'demandeur':
-        setActiveTab('operator');
+        defaultTab = 'operator';
         break;
       case 'maintenance':
-        setActiveTab('maintenance');
+        defaultTab = 'maintenance';
         break;
       case 'admin':
-        setActiveTab('analytics');
+        defaultTab = 'analytics';
         break;
       default:
-        setActiveTab('operator');
+        defaultTab = 'operator';
     }
+    
+    setActiveTab(defaultTab);
+    localStorage.setItem('carriprefa_active_tab', defaultTab); // NEW: Save tab
   };
 
   const handleLogout = async () => {
@@ -132,6 +198,7 @@ function App() {
     } finally {
       localStorage.removeItem('carriprefa_user');
       localStorage.removeItem('carriprefa_interface');
+      localStorage.removeItem('carriprefa_active_tab'); // NEW: Clear saved tab
       setUser(null);
       setSelectedInterface(null);
       setActiveTab('operator');
@@ -141,6 +208,7 @@ function App() {
 
   const handleBackToSelection = () => {
     localStorage.removeItem('carriprefa_interface');
+    localStorage.removeItem('carriprefa_active_tab'); // NEW: Clear saved tab
     setSelectedInterface(null);
     setShowAuth(false);
   };
@@ -150,7 +218,14 @@ function App() {
     if (selectedInterface === 'maintenance') {
       setSelectedInterface(null);
       localStorage.removeItem('carriprefa_interface');
+      localStorage.removeItem('carriprefa_active_tab'); // NEW: Clear saved tab
     }
+  };
+
+  // NEW: Enhanced tab change handler that saves the active tab
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    localStorage.setItem('carriprefa_active_tab', tabId); // NEW: Save tab on change
   };
 
   // Helper function to get user display name
@@ -195,30 +270,6 @@ function App() {
   if (!selectedInterface) {
     return <InterfaceSelector onSelect={handleInterfaceSelect} user={user} />;
   }
-
-  const getTabsForInterface = () => {
-    const tabs = [];
-
-    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
-      tabs.push({ id: 'operator', label: selectedInterface === 'admin' ? 'Interface Demandeur' : 'Nouvelle Demande', icon: '📝' });
-    }
-
-    if (selectedInterface === 'maintenance' || selectedInterface === 'admin') {
-      tabs.push({ id: 'maintenance', label: 'Équipe Maintenance', icon: '🔧' });
-    }
-
-    if (selectedInterface === 'admin') {
-      tabs.push({ id: 'analytics', label: 'Tableau de Bord', icon: '📊' });
-    }
-
-    if (selectedInterface === 'demandeur' || selectedInterface === 'admin') {
-      tabs.push({ id: 'notifications', label: 'Notifications', icon: '🔔' });
-    }
-
-    return tabs;
-  };
-
-  const availableTabs = getTabsForInterface();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -291,7 +342,7 @@ function App() {
               <button
                 key={tab.id}
                 className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)} // UPDATED: Use new handler
               >
                 <span className="tab-icon">{tab.icon}</span>
                 <span className="tab-label">{tab.label}</span>

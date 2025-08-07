@@ -117,4 +117,3 @@ export const technicienApi = {
     api.get('/tech/dashboard'),
 };
 // At the end of your api.js file
-export const getMyInterventions = technicienApi.getMyInterventions;

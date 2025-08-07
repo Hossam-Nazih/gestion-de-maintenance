@@ -228,8 +228,6 @@ const NotificationsInterface = () => {
     switch (selectedFilter) {
       case 'unread':
         return !notification.read;
-      case 'urgent':
-        return notification.priority === 'high';
       case 'completed':
         return notification.type === 'status_update' && notification.title.includes('terminée');
       case 'in_progress':
@@ -244,7 +242,6 @@ const NotificationsInterface = () => {
   const filters = [
     { label: 'Toutes', value: 'all', count: notifications.length },
     { label: 'Non lues', value: 'unread', count: notifications.filter(n => !n.read).length },
-    { label: 'Urgentes', value: 'urgent', count: notifications.filter(n => n.priority === 'high').length },
     { label: 'En cours', value: 'in_progress', count: notifications.filter(n => n.details.statut === 'en_cours').length },
     { label: 'En attente', value: 'pending', count: notifications.filter(n => n.details.statut === 'en_attente').length },
     { label: 'Terminées', value: 'completed', count: notifications.filter(n => n.type === 'status_update' && n.title.includes('terminée')).length },
